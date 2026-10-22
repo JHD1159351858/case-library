@@ -249,7 +249,7 @@ p {
    1. 标题列放开 36rem 上限，改由网格轨道给宽；
    2. 列设为查询容器，字号 = min(断点设计值, 17.5cqw)（略留安全余量，
       保证「Agent Case」始终单行），窄视口平滑降档、宽视口保持 52/96/135 设计值；
-   3. 行高改 0.95em 跟随字号缩放（与原 50/92/128 的比值一致）。
+   3. 行高设为 1.1em，给上行 g 的下伸部分和下行字母顶部留出间距。
    注：column 容器为 inline-size containment，列宽不受内容回馈，无循环依赖。 */
 .phase-p1 .phase-title-col {
   max-width: none;
@@ -258,7 +258,7 @@ p {
 
 .phase-p1 .title-xl {
   font-size: clamp(44px, 17.5cqw, 52px);
-  line-height: 0.95em;
+  line-height: 1.1em;
 }
 
 /* ---- 眉标（P4） ---- */
