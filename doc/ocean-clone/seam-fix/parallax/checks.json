@@ -1,0 +1,34 @@
+[
+  {
+    "state": "surface",
+    "copyOffset": "0px",
+    "depth": "0.000",
+    "overflow": false,
+    "renderer": "webgl"
+  },
+  {
+    "state": "approach",
+    "copyOffset": "-15.514583333333333px",
+    "depth": "0.300",
+    "scrollY": 677
+  },
+  {
+    "state": "entry",
+    "copyOffset": "-24.81875px",
+    "depth": "0.480",
+    "scrollY": 1083
+  },
+  {
+    "state": "underwater",
+    "copyOffset": "-51.7px",
+    "depth": "1.000",
+    "renderer": "webgl",
+    "scrollY": 2256
+  },
+  {
+    "state": "reverse",
+    "copyOffset": "-15.514583333333333px",
+    "depth": "0.300",
+    "scrollY": 677
+  }
+]

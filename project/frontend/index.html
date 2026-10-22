@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agent Case Library — ChaoXing LiaoNing</title>
+  <meta name="description" content="Browse AI agent cases by discipline, school, and course. Explore case details, usage guides, and available links." />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="site-ui.css" />
+</head>
+<body>
+  <!-- 外层：750vh 滚动壳，为 WebGL 时间轴提供滚动行程 -->
+  <div class="hero-scroll" id="hero">
+
+    <div class="hero-viewport">
+      <!-- WebGL 画布容器（场景初始化成功后 canvas 注入于此） -->
+      <div id="webgl" class="webgl-layer"></div>
+
+      <!-- WebGL 降级提示：能力检测失败或初始化异常时由 main.js 显示 -->
+      <div id="webgl-fallback" class="webgl-fallback" hidden>
+        <p class="webgl-fallback-title">WebGL Unavailable</p>
+        <p class="webgl-fallback-copy">This experience requires WebGL to render the 3D scene. Please enable hardware acceleration or open it in a WebGL-capable browser.</p>
+      </div>
+
+      <!-- DOM 覆盖层：顶部品牌/导航 + 四组相位文案 -->
+      <div id="overlay" class="hero-overlay">
+        <div class="overlay-top">
+          <div class="brand">ChaoXing LiaoNing</div>
+          <nav class="main-nav" aria-label="Primary">
+            <div class="nav-item"><span class="nav-label">Cases</span><span class="nav-bullet" aria-hidden="true">&bull;</span></div>
+            <div class="nav-item"><span class="nav-label">Disciplines</span><span class="nav-bullet" aria-hidden="true">&bull;</span></div>
+            <div class="nav-item"><span class="nav-label">Courses</span><span class="nav-bullet" aria-hidden="true">&bull;</span></div>
+            <div class="nav-item"><span class="nav-label">Scenarios</span><span class="nav-bullet" aria-hidden="true">&bull;</span></div>
+            <div class="nav-item"><span class="nav-label">Guides</span><span class="nav-bullet" aria-hidden="true">&bull;</span></div>
+          </nav>
+        </div>
+
+        <!-- 直达最后一幕：滚动中始终悬浮，到达最后一幕后淡出（site-ui.js 控制） -->
+        <button class="skip-finale" id="skip-to-finale" type="button" aria-label="Skip introduction to library access">
+          <span class="skip-finale-label">Skip Intro</span>
+          <span class="skip-finale-arrow" aria-hidden="true">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3.5 8.5 8 13l4.5-4.5" /></svg>
+          </span>
+        </button>
+
+        <!-- 相位 1：Agent Case / Library -->
+        <div class="phase phase-p1" data-phase="p1" style="opacity: 1">
+          <div class="phase-grid">
+            <div class="phase-title-col">
+              <h1 class="title-xl">Agent Case
+Library</h1>
+            </div>
+            <div class="phase-copy-col">
+              <p class="copy">Explore AI agent cases across disciplines and courses. Find each case's purpose, context, and usage guidance in one library.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 相位 2：Explore Cases / Find Your Focus -->
+        <div class="phase phase-p2" data-phase="p2" style="opacity: 0; transform: translateY(40px)">
+          <h1 class="title-lg title-capped">Explore Cases
+Find Your Focus</h1>
+        </div>
+
+        <!-- 相位 3：Inside / Each Case -->
+        <div class="phase phase-p3" data-phase="p3" style="opacity: 0; transform: translateY(40px)">
+          <div class="phase-grid">
+            <div class="phase-title-col">
+              <h1 class="title-lg">Inside
+Each Case</h1>
+            </div>
+            <div class="phase-copy-col">
+              <p class="copy">Understand the problem each case addresses, where it fits, and how to use it. Review course information and case details before choosing what to explore.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 相位 4：Find Your / Next Case -->
+        <div class="phase phase-p4" data-phase="p4" style="opacity: 0; transform: translateY(40px)">
+          <div class="phase-grid">
+            <div class="phase-title-col">
+              <h1 class="title-lg">Find Your
+Next Case</h1>
+              <span class="eyebrow">Explore the Agent Case Library</span>
+            </div>
+            <div class="phase-copy-col">
+              <p class="copy">Search by name, discipline, school, or course. Open a case to read its details and usage guide, and follow available links to explore further.</p>
+
+              <!-- 最后一幕专属：登录入口 / 登录态（site-ui.js 注入数据与交互） -->
+              <div class="finale-dock" id="finale-dock" data-auth-state="loading">
+                <div class="finale-dock-row">
+                  <a class="finale-action" id="finale-login" href="/api/auth/chaoxing/start" hidden>
+                    <span class="finale-action-label">登录</span>
+                    <span class="finale-action-hint">超星统一认证</span>
+                  </a>
+                  <div class="finale-user" id="finale-user" hidden>
+                    <span class="finale-user-name" id="finale-user-name"></span>
+                    <span class="finale-user-badge" id="finale-user-badge" hidden>管理员</span>
+                    <button class="finale-logout" id="finale-logout" type="button">退出</button>
+                  </div>
+                </div>
+                <p class="finale-dock-status" id="finale-status" role="status" aria-live="polite"></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./libs/three/three.module.js",
+        "three/addons/": "./libs/three/addons/"
+      }
+    }
+  </script>
+  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/site-ui.js"></script>
+</body>
+</html>

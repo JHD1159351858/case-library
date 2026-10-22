@@ -1,0 +1,7 @@
+.ocean-background{background:linear-gradient(#89b7ce 0%,#ead4b1 64%,#234c5a 65%,#062d42 100%)}
+.scene-status{position:absolute;left:8%;right:8%;bottom:13%;margin:0;text-align:center;font-size:13px;line-height:1.6;color:#fff;text-shadow:0 1px 5px #002535}
+.is-submerged .hero-copy,.is-submerged .site-header{color:#e8f4f2}
+.is-submerged .outline-button,.is-submerged .play-circle{border-color:currentColor}
+.is-submerged .menu-button span{background:currentColor}
+.is-submerged .mobile-nav{color:#061b3d}
+.hero-copy,.site-header{transition:color .6s}

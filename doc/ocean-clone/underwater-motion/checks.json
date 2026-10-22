@@ -1,0 +1,10 @@
+{
+  "playing": {
+    "meanChannelDifference": 23.11,
+    "changedPixelsPercent": 81.57
+  },
+  "paused": {
+    "meanChannelDifference": 0.0,
+    "changedPixelsPercent": 0.0
+  }
+}

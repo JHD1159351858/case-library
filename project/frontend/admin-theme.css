@@ -1,0 +1,156 @@
+/* 仅由管理端加载，明亮模式覆盖共享样式中的固定暗色。 */
+:root[data-admin-theme='dark'] {
+  color-scheme: dark;
+}
+
+:root[data-admin-theme='light'] {
+  color-scheme: light;
+  --bg: #f3f6fa;
+  --bg-elevated: #ffffff;
+  --bg-elevated-hover: #edf2f6;
+  --border: #dce3eb;
+  --border-strong: #bcc9d6;
+  --text: #1b2a3b;
+  --text-muted: #526174;
+  --text-faint: #657487;
+  --accent: #007d69;
+  --accent-soft: rgba(0, 125, 105, 0.08);
+  --accent-cyan: #006e91;
+  --accent-cyan-soft: rgba(0, 110, 145, 0.08);
+  --warn: #8a5500;
+  --danger: #b42332;
+  --shadow: 0 12px 32px rgba(22, 42, 62, 0.07);
+}
+
+[data-admin-theme='light'] body {
+  background: var(--bg);
+}
+
+[data-admin-theme='light'] .app-topbar {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+[data-admin-theme='light'] :is(.panel, .modal) {
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+}
+
+[data-admin-theme='light'] :is(.app-title-sub, .stat-value) {
+  color: var(--accent);
+}
+
+[data-admin-theme='light'] :is(.session-badge, .stat-chip) {
+  border-color: rgba(0, 110, 145, 0.2);
+  background: var(--accent-cyan-soft);
+  color: var(--accent-cyan);
+}
+
+[data-admin-theme='light'] .stat-chip-count {
+  color: var(--text-muted);
+}
+
+[data-admin-theme='light'] :is(.btn-primary, .detail-link-btn) {
+  border-color: rgba(0, 125, 105, 0.35);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+[data-admin-theme='light'] :is(.btn-primary, .detail-link-btn):hover {
+  border-color: var(--accent);
+  background: rgba(0, 125, 105, 0.14);
+  color: var(--accent);
+  box-shadow: none;
+}
+
+[data-admin-theme='light'] .data-table :is(th, td) {
+  border-bottom-color: var(--border);
+}
+
+[data-admin-theme='light'] :is(.data-table th, .stat-card, .cover-preview, .table-cover, .detail-cover) {
+  background: var(--bg);
+}
+
+[data-admin-theme='light'] .data-table tbody tr:hover {
+  background: var(--bg-elevated-hover);
+}
+
+[data-admin-theme='light'] .data-table tr.row-editing {
+  background: var(--accent-cyan-soft);
+}
+
+[data-admin-theme='light'] .stat-card-total {
+  border-color: rgba(0, 125, 105, 0.2);
+  background: var(--accent-soft);
+}
+
+[data-admin-theme='light'] .field label {
+  color: var(--text);
+}
+
+[data-admin-theme='light'] :is(.input, .textarea, select.input option) {
+  background-color: var(--bg-elevated);
+}
+
+[data-admin-theme='light'] :is(.input, .textarea):focus {
+  border-color: var(--accent);
+  background-color: var(--bg-elevated);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+[data-admin-theme='light'] select.input {
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+}
+
+[data-admin-theme='light'] :is(.form-actions, .modal-head) {
+  border-color: var(--border);
+}
+
+[data-admin-theme='light'] .modal-head {
+  background: var(--accent-soft);
+}
+
+[data-admin-theme='light'] .modal-backdrop {
+  background: rgba(27, 42, 59, 0.35);
+}
+
+[data-admin-theme='light'] .tag-chip {
+  border-color: rgba(0, 125, 105, 0.2);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+[data-admin-theme='light'] :is(.notice[data-tone='success'], .toast) {
+  border-color: rgba(0, 125, 105, 0.3);
+  background: #edf8f4;
+  color: var(--accent);
+}
+
+[data-admin-theme='light'] :is(.notice[data-tone='error'], .toast[data-tone='error'], .btn-danger:hover, .btn-confirming) {
+  border-color: rgba(180, 35, 50, 0.3);
+  background: #fff0f1;
+  color: var(--danger);
+}
+
+[data-admin-theme='light'] .notice[data-tone='warn'] {
+  border-color: rgba(138, 85, 0, 0.3);
+  background: #fff6e8;
+  color: var(--warn);
+}
+
+[data-admin-theme='light'] .card-effects-preview {
+  --text-muted: #526174;
+  --text-faint: #657487;
+}
+
+[data-admin-theme='light'] .card-effects-preview .agent-card {
+  --accent: #00ffd1;
+  --accent-soft: rgba(0, 255, 209, 0.14);
+  --accent-cyan: #5fe9ff;
+}
+
+/* 按钮与会话区在窄屏换行，保持切换入口可见。 */
+.app-topbar,
+.app-topbar-right {
+  flex-wrap: wrap;
+}

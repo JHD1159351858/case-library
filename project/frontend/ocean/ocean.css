@@ -1,0 +1,86 @@
+@font-face{font-family:"Bodoni Moda";src:url("./assets/fonts/bodoni-moda.ttf") format("truetype");font-style:normal;font-weight:400;font-display:swap}
+@font-face{font-family:"DM Sans";src:url("./assets/fonts/dm-sans.ttf") format("truetype");font-style:normal;font-weight:400;font-display:swap}
+
+:root{--ink:#061b3d;--paper:#edf2ef;--dive:0;font-family:"DM Sans",Arial,sans-serif;color:var(--ink);background:#0b3a52;font-synthesis:none}
+*{box-sizing:border-box}
+html{scrollbar-width:none;overscroll-behavior-y:none}
+html::-webkit-scrollbar{display:none}
+body{margin:0}
+button,a{-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer}
+button,a{touch-action:manipulation}
+button{border:0;background:none;padding:0}
+a{color:inherit;text-decoration:none}
+button:focus-visible,a:focus-visible{outline:2px solid currentColor;outline-offset:6px}
+svg{display:block}
+[hidden]{display:none!important}
+.ocean-stage{position:fixed;inset:0;overflow:hidden;height:100svh;min-height:460px;isolation:isolate}
+.ocean-background{position:absolute;inset:0;background:#7cacc7;z-index:-1;pointer-events:none}
+.ocean-background>img,.ocean-background>canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.background-underwater{opacity:var(--dive)}
+#ocean-canvas{opacity:0;transition:opacity .5s}
+.scene-ready #ocean-canvas{opacity:1}
+.page-overlay{position:absolute;inset:0;transition:opacity .5s}
+.announcement{display:flex;align-items:center;justify-content:center;gap:12px;height:30px;width:100%;font-size:11px;letter-spacing:.025em;color:#e5edf1;background:rgba(32,74,112,.36)}
+.announcement span{font-size:17px;line-height:1;transition:transform .2s}
+.announcement:hover span{transform:translateX(4px)}
+.site-header{position:relative;display:flex;align-items:center;justify-content:space-between;padding:0 4%;height:70px}
+.brand{display:flex;align-items:center;gap:14px}
+.brand svg{width:62px;height:27px;fill:currentColor}
+.brand>span{font-size:15px;letter-spacing:.29em}
+.desktop-nav{display:flex;gap:38px;position:absolute;left:50%;transform:translateX(-50%);align-items:center}
+.desktop-nav button{font-size:14px;white-space:nowrap;position:relative;padding:8px 0}
+.desktop-nav button:after{content:"";position:absolute;bottom:2px;left:0;right:0;height:1px;background:currentColor;transform:scaleX(0);transform-origin:left;transition:transform .2s}
+.desktop-nav button:hover:after{transform:scaleX(1)}
+.outline-button{display:flex;align-items:center;justify-content:center;gap:12px;border:1px solid rgba(6,27,61,.75);border-radius:50px;min-height:38px;padding:0 22px;font-size:13px;transition:background .2s}
+.outline-button:hover{background:rgba(255,255,255,.18)}
+.outline-button span{font-size:18px}
+.hero-copy{position:absolute;left:6.3%;top:22.1%;width:min(670px,70%);transform:translate3d(0,var(--copy-offset,0px),0);will-change:transform}
+.eyebrow{font-size:10px;line-height:1.4;text-transform:uppercase;letter-spacing:.38em;margin:0 0 16px;font-weight:400}
+h1{font-family:"Bodoni Moda","Times New Roman",serif;font-optical-sizing:auto;font-size:clamp(86px,6.7vw,140px);font-weight:400;line-height:.86;letter-spacing:-.058em;margin:0 0 16px;white-space:nowrap}
+.hero-description{font-size:clamp(19px,1.4vw,28px);line-height:1.28;letter-spacing:-.035em;margin:0}
+.hero-actions{display:flex;align-items:center;gap:26px;margin-top:25px}
+.primary-button{display:inline-flex;align-items:center;justify-content:center;gap:14px;min-height:43px;border-radius:40px;padding:0 27px;color:#f5f4ef;background:#031b40;border:1px solid rgba(255,255,255,.12);font-size:13px;white-space:nowrap;transition:background .2s,transform .2s}
+.primary-button:hover{background:#123658;transform:translateY(-2px)}
+.primary-button svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.25}
+.film-button{display:flex;align-items:center;gap:11px;font-size:13px;white-space:nowrap}
+.play-circle{width:42px;height:42px;display:grid;place-items:center;border:1px solid var(--ink);border-radius:50%;transition:background .2s}
+.film-button:hover .play-circle{background:rgba(255,255,255,.3)}
+.play-circle svg{width:17px;height:17px;fill:currentColor}
+.scene-footer{position:absolute;bottom:31px;left:3.1%;right:3.1%;display:flex;align-items:center;justify-content:space-between;color:#eef3ed;text-shadow:0 1px 8px rgba(0,25,45,.35)}
+.motion-button{display:flex;align-items:center;gap:17px;font-size:9px;letter-spacing:.28em;text-transform:uppercase}
+.motion-circle{display:grid;place-items:center;width:35px;height:35px;border:1px solid rgba(245,249,246,.82);border-radius:50%}
+.motion-circle svg{width:17px;height:17px;grid-area:1/1;fill:none;stroke:currentColor;stroke-width:1.3}
+.motion-circle .resume-icon{display:none;fill:currentColor;stroke:none;width:15px;height:15px}
+.motion-button[aria-pressed="true"] .pause-icon{display:none}
+.motion-button[aria-pressed="true"] .resume-icon{display:block}
+.scroll-button{display:flex;gap:13px;align-items:center;font-size:9px;letter-spacing:.16em;text-transform:uppercase}
+.scroll-button svg{width:18px;height:22px;fill:none;stroke:currentColor;stroke-width:1.2;transition:transform .4s}
+.is-submerged .scroll-button svg{transform:rotate(180deg)}
+.scroll-distance{height:340svh}
+.menu-button,.mobile-nav{display:none}
+
+.reference-dialog{color:var(--ink);border:1px solid rgba(6,27,61,.15);padding:55px 45px 45px;width:min(90vw,480px);background:#eef2ed;border-radius:3px;box-shadow:0 25px 100px #001f3555}
+.reference-dialog::backdrop{background:rgba(0,25,45,.28);backdrop-filter:blur(8px)}
+.dialog-close{position:absolute;right:20px;top:10px;font-size:30px;font-weight:400}
+.reference-dialog h2{font-family:"Bodoni Moda","Times New Roman",serif;font-weight:400;font-size:52px;letter-spacing:-.05em;margin:0 0 20px}
+.reference-dialog>p:not(.eyebrow){font-size:15px;line-height:1.7;margin:0 0 28px}
+.film-dialog{position:fixed;inset:0;width:100%;max-width:none;height:100svh;max-height:none;padding:0;border:0;background:transparent;color:var(--paper);margin:0;overflow:hidden;text-shadow:0 2px 20px #001d3955}
+.film-dialog::backdrop{background:transparent}
+.film-open .page-overlay{opacity:0;pointer-events:none}
+.film-close{position:absolute;right:4%;top:38px;display:flex;gap:20px;align-items:center;font-size:13px;letter-spacing:.02em}
+.film-close span{font-size:28px;line-height:1}
+.film-caption{position:absolute;left:6.3%;bottom:19%}
+.film-caption h2{font-family:"Bodoni Moda","Times New Roman",serif;font-size:clamp(68px,7.5vw,140px);line-height:.95;letter-spacing:-.045em;font-weight:400;margin:14px 0 24px}
+.film-note{font-size:12px;letter-spacing:.03em;opacity:.8}
+.film-bottom{position:absolute;left:4%;right:4%;bottom:40px;display:flex;justify-content:space-between;align-items:center;font-size:11px;letter-spacing:.04em}
+.film-pause{display:flex;gap:18px;align-items:center}
+.film-progress{position:absolute;bottom:0;left:0;right:0;height:2px;background:#ffffff33}
+.film-progress>span{display:block;height:100%;background:var(--paper);transform-origin:left;transform:scaleX(0)}
+.noscript-message{position:fixed;bottom:80px;left:6.3%;color:white;font-size:12px}
+
+@media(min-width:1800px){.announcement{height:36px;font-size:13px}.site-header{height:105px;padding-top:22px}.brand svg{width:78px}.brand>span{font-size:18px}.desktop-nav{gap:47px}.desktop-nav button{font-size:17px}.outline-button{font-size:16px;min-height:46px;padding:0 27px}.eyebrow{font-size:13px;margin-bottom:22px}.primary-button{min-height:52px;font-size:16px;padding:0 33px}.play-circle{width:51px;height:51px}.film-button{font-size:16px}.hero-actions{margin-top:32px;gap:31px}.scene-footer{bottom:36px}.motion-circle{width:43px;height:43px}.motion-button,.scroll-button{font-size:11px}}
+@media(max-width:900px){.desktop-nav{gap:24px}.brand{gap:10px}.brand svg{width:49px}.brand>span{font-size:13px}.hero-copy{top:25%;left:6%;width:88%}h1{font-size:clamp(82px,10vw,100px)}.hero-description{font-size:21px}.eyebrow{font-size:9px}.outline-button{padding:0 17px}.scene-footer{left:5%;right:5%;bottom:27px}}
+@media(max-width:600px){.ocean-stage{min-height:420px}.announcement{height:28px;font-size:9px;gap:9px}.site-header{height:81px;padding:12px 6% 0}.brand svg{width:49px;height:26px}.brand>span{font-size:12px;letter-spacing:.28em}.desktop-nav,.header-explore{display:none}.menu-button{display:flex;flex-direction:column;justify-content:center;gap:6px;width:38px;height:38px;align-items:center}.menu-button span{display:block;width:24px;height:1px;background:var(--ink);transition:transform .2s}.menu-button[aria-expanded="true"] span:first-child{transform:translateY(3.5px) rotate(45deg)}.menu-button[aria-expanded="true"] span:last-child{transform:translateY(-3.5px) rotate(-45deg)}.mobile-nav{position:absolute;display:flex;flex-direction:column;top:79px;left:6%;right:6%;padding:17px 22px;background:rgba(233,243,241,.94);backdrop-filter:blur(16px);border:1px solid #0c2d4625;border-radius:3px;z-index:5}.mobile-nav button{display:flex;justify-content:space-between;padding:14px 0;font-size:15px}.mobile-nav button+button{border-top:1px solid #0c2d4615}.hero-copy{left:6.3%;top:25.5%;width:87.4%}.eyebrow{font-size:8px;letter-spacing:.31em;margin-bottom:20px}h1{font-size:clamp(63px,17.8vw,94px);line-height:.94;letter-spacing:-.06em;margin-bottom:21px}.hero-description{font-size:17px;line-height:1.4;letter-spacing:-.025em}.hero-actions{gap:16px;margin-top:26px}.primary-button{font-size:11px;padding:0 17px;gap:10px;min-height:42px}.primary-button svg{width:15px}.film-button{gap:8px;font-size:11px}.play-circle{width:37px;height:37px}.play-circle svg{width:14px;height:14px}.scene-footer{left:6%;right:6%;bottom:calc(25px + env(safe-area-inset-bottom))}.motion-button{gap:10px;font-size:8px;letter-spacing:.18em}.motion-circle{width:32px;height:32px}.scroll-button{gap:8px;font-size:8px;letter-spacing:.1em}.scroll-button svg{width:15px;height:20px}.scroll-distance{height:300svh}.reference-dialog{padding:48px 28px 32px}.reference-dialog h2{font-size:46px}.film-close{top:30px;right:7%}.film-caption{left:7%;bottom:23%}.film-caption h2{font-size:76px}.film-bottom{left:7%;right:7%;bottom:35px;font-size:10px}.film-note{font-size:10px}}
+@media(max-height:600px) and (min-width:601px){.hero-copy{top:25%}.eyebrow{font-size:8px;margin-bottom:10px}h1{font-size:clamp(66px,12vh,90px);margin-bottom:12px}.hero-description{font-size:16px}.hero-actions{margin-top:17px}.primary-button{min-height:37px}.play-circle{width:36px;height:36px}.scene-footer{bottom:18px}.site-header{height:75px;padding-top:12px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important}.primary-button:hover{transform:none}}

@@ -1,0 +1,21 @@
+# 环境配置与机密（绝不提交）
+.env
+.env.local
+.env.*.local
+
+# 数据库文件（运行时生成）
+database/*.db
+database/*.db-wal
+database/*.db-shm
+database/*.db-journal
+database/backups/
+database/uploads/
+
+# 依赖与构建产物（当前项目零依赖，预留）
+node_modules/
+dist/
+
+# 验证与调试产物
+utils/verify/shots/
+utils/verify/chrome-profile*/
+*.log

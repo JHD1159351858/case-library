@@ -1,0 +1,26 @@
+{
+  "live": {
+    "sky": {
+      "meanChannelChange": 0.0,
+      "changedPixelsOver8": 0,
+      "samplePixels": 125000
+    },
+    "water": {
+      "meanChannelChange": 23.301,
+      "changedPixelsOver8": 156894,
+      "samplePixels": 198400
+    }
+  },
+  "paused": {
+    "sky": {
+      "meanChannelChange": 0.0,
+      "changedPixelsOver8": 0,
+      "samplePixels": 125000
+    },
+    "water": {
+      "meanChannelChange": 0.0,
+      "changedPixelsOver8": 0,
+      "samplePixels": 198400
+    }
+  }
+}

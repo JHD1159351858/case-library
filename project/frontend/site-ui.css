@@ -1,0 +1,295 @@
+/* ===========================================================================
+   站点交互层样式 — 首页最后一幕（跳过按钮 + 登录区）
+   与 styles.css 同一视觉体系：纯黑底、Anybody 字、青/紫霓虹点缀
+   =========================================================================== */
+
+/* ---- 直达最后一幕按钮 ---- */
+.skip-finale {
+  position: absolute;
+  left: 50%;
+  bottom: 9.5rem;
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 1.15rem;
+  transform: translateX(-50%);
+  border: 1px solid rgba(0, 255, 209, 0.35);
+  border-radius: 999px;
+  background: rgba(4, 10, 12, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: rgba(255, 255, 255, 0.92);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: border-color 220ms ease, color 220ms ease, background-color 220ms ease,
+    box-shadow 220ms ease, opacity 320ms ease, transform 220ms ease;
+  animation: skip-breathe 3.2s ease-in-out infinite;
+}
+
+.skip-finale:hover {
+  border-color: rgba(0, 255, 209, 0.85);
+  background: rgba(0, 255, 209, 0.1);
+  color: #00ffd1;
+  box-shadow: 0 0 24px rgba(0, 255, 209, 0.22);
+  transform: translateX(-50%) translateY(-1px);
+  animation-play-state: paused;
+}
+
+.skip-finale:active {
+  transform: translateX(-50%) translateY(0) scale(0.985);
+  box-shadow: 0 0 12px rgba(0, 255, 209, 0.28);
+}
+
+.skip-finale:focus-visible {
+  outline: 2px solid rgba(0, 255, 209, 0.8);
+  outline-offset: 3px;
+}
+
+.skip-finale-arrow {
+  display: inline-flex;
+  animation: skip-bounce 1.9s ease-in-out infinite;
+}
+
+.skip-finale.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(8px);
+}
+
+@keyframes skip-breathe {
+  0%, 100% { box-shadow: 0 0 0 rgba(0, 255, 209, 0); }
+  50% { box-shadow: 0 0 18px rgba(0, 255, 209, 0.16); }
+}
+
+@keyframes skip-bounce {
+  0%, 100% { transform: translateY(-1px); }
+  50% { transform: translateY(2px); }
+}
+
+/* ---- 最后一幕登录区 ---- */
+.finale-dock {
+  margin-top: 1.5rem;
+  padding: 1.05rem 1.15rem;
+  max-width: 24rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: linear-gradient(150deg, rgba(10, 16, 20, 0.88), rgba(6, 8, 12, 0.92));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  pointer-events: auto;
+}
+
+.finale-dock[data-auth-state='loading'] .finale-dock-row {
+  opacity: 0.45;
+}
+
+.finale-dock-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.finale-action {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  padding: 0.6rem 1.1rem;
+  border: 1px solid rgba(0, 255, 209, 0.55);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(0, 255, 209, 0.16), rgba(0, 255, 209, 0.05));
+  color: #d7fff6;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 200ms ease, border-color 200ms ease, box-shadow 200ms ease,
+    transform 160ms ease, color 200ms ease;
+}
+
+.finale-action:hover {
+  border-color: #00ffd1;
+  color: #ffffff;
+  box-shadow: 0 0 22px rgba(0, 255, 209, 0.3);
+  transform: translateY(-1px);
+}
+
+.finale-action:active {
+  transform: translateY(0) scale(0.99);
+}
+
+.finale-action:focus-visible {
+  outline: 2px solid rgba(0, 255, 209, 0.85);
+  outline-offset: 2px;
+}
+
+.finale-action-hint {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(0, 255, 209, 0.75);
+}
+
+.finale-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.finale-user-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #ffffff;
+  letter-spacing: 0.01em;
+}
+
+.finale-user-badge {
+  padding: 0.16rem 0.5rem;
+  border: 1px solid rgba(199, 125, 255, 0.6);
+  border-radius: 999px;
+  background: rgba(199, 125, 255, 0.16);
+  color: #e2c4ff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.finale-logout {
+  padding: 0.45rem 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 180ms ease, color 180ms ease, background-color 180ms ease;
+}
+
+.finale-logout:hover {
+  border-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+}
+
+.finale-logout:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.finale-logout:focus-visible {
+  outline: 2px solid rgba(199, 125, 255, 0.8);
+  outline-offset: 2px;
+}
+
+.finale-entries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.finale-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid rgba(0, 255, 255, 0.28);
+  border-radius: 8px;
+  background: rgba(0, 255, 255, 0.06);
+  color: rgba(224, 253, 255, 0.92);
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: border-color 180ms ease, background-color 180ms ease, color 180ms ease,
+    transform 160ms ease;
+}
+
+.finale-entry::after {
+  content: '\2197';
+  font-size: 0.7rem;
+  color: rgba(0, 255, 255, 0.7);
+  transition: transform 180ms ease;
+}
+
+.finale-entry:hover {
+  border-color: rgba(0, 255, 255, 0.8);
+  background: rgba(0, 255, 255, 0.14);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.finale-entry:hover::after {
+  transform: translate(1px, -1px);
+}
+
+.finale-dock-status {
+  margin: 0.75rem 0 0;
+  min-height: 1.1rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.finale-dock-status[data-tone='error'] {
+  color: #ff9b9b;
+}
+
+.finale-dock-status[data-tone='success'] {
+  color: #86ffd9;
+}
+
+/* ---- 响应式 ---- */
+@media (min-width: 640px) {
+  .skip-finale {
+    bottom: 11rem;
+    font-size: 0.75rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .skip-finale {
+    bottom: 13rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .skip-finale-label {
+    letter-spacing: 0.14em;
+  }
+
+  .finale-dock {
+    max-width: 100%;
+    padding: 0.9rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skip-finale,
+  .skip-finale-arrow {
+    animation: none;
+  }
+
+  .skip-finale,
+  .finale-action,
+  .finale-logout,
+  .finale-entry {
+    transition: none;
+  }
+}

@@ -1,0 +1,11 @@
+[project]
+name = "agent-official-website"
+requires = ["nodejs-24"]
+
+[dev]
+build = ["node", "--check", "start-cloud.mjs"]
+run = ["node", "start-cloud.mjs"]
+
+[deploy]
+build = ["node", "--check", "start-cloud.mjs"]
+run = ["node", "start-cloud.mjs"]

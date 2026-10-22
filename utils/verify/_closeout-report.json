@@ -1,0 +1,184 @@
+{
+  "meta": {
+    "pageUrl": "http://127.0.0.1:1002/",
+    "viewport": "375x812 dpr=1",
+    "reusedTarget": true,
+    "startedAt": "2026-09-12T12:39:25.395Z"
+  },
+  "fps": 42,
+  "hasCanvas": true,
+  "raw": {
+    "t070": {
+      "settleRounds": 2,
+      "sampleA": {
+        "p2": {
+          "styleOpacity": "0",
+          "computedOpacity": "0",
+          "styleTransform": "translateY(40px)",
+          "computedTransform": "matrix(1, 0, 0, 1, 0, 40)",
+          "inlinePointerEvents": "none",
+          "rect": {
+            "y": 724,
+            "bottom": 812,
+            "h": 88
+          },
+          "titleRect": {
+            "y": 724,
+            "bottom": 812
+          },
+          "copyRect": null,
+          "titleGapToCopyPx": null
+        },
+        "p3": {
+          "styleOpacity": "0.500474",
+          "computedOpacity": "0.500474",
+          "styleTransform": "translateY(19.9811px)",
+          "computedTransform": "matrix(1, 0, 0, 1, 0, 19.9811)",
+          "inlinePointerEvents": "auto",
+          "rect": {
+            "y": 606,
+            "bottom": 792,
+            "h": 186
+          },
+          "titleRect": {
+            "y": 606,
+            "bottom": 694
+          },
+          "copyRect": {
+            "y": 726,
+            "bottom": 792
+          },
+          "titleGapToCopyPx": 32
+        }
+      },
+      "sampleB": {
+        "p2": {
+          "styleOpacity": "0",
+          "computedOpacity": "0",
+          "styleTransform": "translateY(40px)",
+          "computedTransform": "matrix(1, 0, 0, 1, 0, 40)",
+          "inlinePointerEvents": "none",
+          "rect": {
+            "y": 724,
+            "bottom": 812,
+            "h": 88
+          },
+          "titleRect": {
+            "y": 724,
+            "bottom": 812
+          },
+          "copyRect": null,
+          "titleGapToCopyPx": null
+        },
+        "p3": {
+          "styleOpacity": "0.500474",
+          "computedOpacity": "0.500474",
+          "styleTransform": "translateY(19.9811px)",
+          "computedTransform": "matrix(1, 0, 0, 1, 0, 19.9811)",
+          "inlinePointerEvents": "auto",
+          "rect": {
+            "y": 606,
+            "bottom": 792,
+            "h": 186
+          },
+          "titleRect": {
+            "y": 606,
+            "bottom": 694
+          },
+          "copyRect": {
+            "y": 726,
+            "bottom": 792
+          },
+          "titleGapToCopyPx": 32
+        }
+      },
+      "scrollYNow": {
+        "scrollY": 3695,
+        "max": 5278,
+        "ratio": 0.7001
+      },
+      "stabilityDiffFull": {
+        "meanAbs": 41.593,
+        "changedRatio": 0.1329
+      },
+      "stabilityDiffBottom": {
+        "meanAbs": 42.63,
+        "changedRatio": 0.138
+      },
+      "diffVsOldBoneFull": {
+        "meanAbs": 48.023,
+        "changedRatio": 0.1557
+      },
+      "diffVsOldBoneBottom": {
+        "meanAbs": 42.376,
+        "changedRatio": 0.1374
+      }
+    },
+    "t080": {
+      "p2": {
+        "styleOpacity": "0",
+        "computedOpacity": "0",
+        "styleTransform": "translateY(40px)",
+        "computedTransform": "matrix(1, 0, 0, 1, 0, 40)",
+        "inlinePointerEvents": "none",
+        "rect": {
+          "y": 724,
+          "bottom": 812,
+          "h": 88
+        },
+        "titleRect": {
+          "y": 724,
+          "bottom": 812
+        },
+        "copyRect": null,
+        "titleGapToCopyPx": null
+      },
+      "p3": {
+        "styleOpacity": "1",
+        "computedOpacity": "1",
+        "styleTransform": "translateY(0px)",
+        "computedTransform": "matrix(1, 0, 0, 1, 0, 0)",
+        "inlinePointerEvents": "auto",
+        "rect": {
+          "y": 586,
+          "bottom": 772,
+          "h": 186
+        },
+        "titleRect": {
+          "y": 586,
+          "bottom": 674
+        },
+        "copyRect": {
+          "y": 706,
+          "bottom": 772
+        },
+        "titleGapToCopyPx": 32
+      }
+    },
+    "shotC": "D:\\Crow5\\Project\\agent-official-website\\utils\\verify\\shots\\mobile-375-p3-t080-plateau.png"
+  },
+  "checks": {
+    "navClick": {
+      "clickTarget": {
+        "x": 296.1,
+        "y": 47,
+        "label": "Products",
+        "cursor": "pointer",
+        "tag": "DIV",
+        "insideAnchor": false
+      },
+      "urlBefore": "http://127.0.0.1:1002/",
+      "urlAfter": "http://127.0.0.1:1002/",
+      "navigated": false,
+      "documentReloaded": false,
+      "errorCountBefore": 0,
+      "errorCountAfter": 0,
+      "newErrors": [],
+      "domCountBefore": 57,
+      "domCountAfter": 57,
+      "domStructurallyIntact": true,
+      "activeElementAfterClick": "BODY"
+    }
+  },
+  "errorsAll": []
+}

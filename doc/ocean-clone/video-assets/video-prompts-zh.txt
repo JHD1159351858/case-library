@@ -1,0 +1,28 @@
+OCEAN 无字背景：图生视频提示词
+
+首帧文件：ocean-clean-first-frame.png
+实际图片尺寸：1672 × 941，约16:9。
+图片来源：使用内置 imagegen，以项目现有干净海景图片为参考重新生成。
+
+使用方法
+选择“图生视频”，上传首帧。建议横版16:9、1080p起，时长按平台支持选择8–10秒。提示词重点描述运动，首帧已经提供构图、颜色与光源。先生成海面循环；需要滚动下潜时，再单独生成过渡片段。不要要求同一段视频既固定镜头无缝循环、又持续下降到水下。
+
+一、海面循环提示词
+
+以输入图片为第一帧，保持原有构图、夕阳位置、色彩和摄影质感。低机位贴近海面，镜头基本固定，只允许极轻微、缓慢的上下浮动，海平线始终稳定。海浪必须持续真实运动：不同大小的浪涌自然向镜头推进，近处浪峰缓慢抬升、卷动、回落，细小波纹在大浪表面流动，水面细节随水体运动，不是整张图片平移或橡胶状拉伸。右侧夕阳的金色倒影随每一道波峰破碎、闪烁、重新聚合，近景有自然散焦的金色光斑。天空与太阳基本稳定，云层只极缓慢移动。正常自然速度，宁静舒缓，真实海上摄影，连续单镜头。首尾构图、光线和浪势尽量接近，便于循环衔接。画面只出现海浪、天空、云与夕阳，不出现文字或界面。
+
+二、海面下潜提示词
+
+以输入图片为第一帧，保持日落光线和海面环境。一个连续的写实第一人称镜头：开头短暂停留在海面，海浪自然起伏，金色反光随波浪闪动；随后相机缓慢、平稳地向水下下降。水线从画面下方向上经过镜头，镜头穿过水面时出现短暂而自然的折射、局部失焦、细小气泡与光线变化，不使用剪辑转场，不做两张图片叠化。镜头完全进入清澈的蓝绿色海水后，轻微仰看上方持续波动的水面，右上方夕阳穿透海水，形成柔和、动态的金色体积光束，水中有少量自然漂浮微粒。末尾在浅水下稳定停留，水面、光束与微粒仍持续运动。空间、光源与水体连贯，正常速度，电影级自然摄影。画面只出现海洋、天空和水下光线，没有文字或界面。
+
+共用负面提示词（如果平台提供负面提示词输入框）
+
+文字、字幕、Logo、水印、网页、菜单、按钮、鼠标、边框、人物、船只、海岸、建筑、鱼群、暴风雨、海啸、夸张巨浪、镜头旋转、快速推拉、突然变焦、剪辑跳切、延时摄影、塑料水面、卡通、油画、重复纹理、画面拉伸、整张图片平移、亮度闪烁、太阳位置跳变。
+
+网页使用建议
+海面循环片用于停留在首屏时的持续海浪；下潜片段的播放进度可与网页滚动绑定。文字、Logo和按钮继续使用独立HTML图层，不生成进视频。循环是否无缝、波浪是否自然需要在生成后检查，提示词不能保证一次生成成功。
+
+图片生成提示词（实际使用）
+Use case: precise-object-edit / photographic reframing. Asset type: one clean landscape first frame for image-to-video, aspect ratio exactly 16:9. Edit the provided ocean photograph into a premium photorealistic 16:9 full-bleed image. Keep the same natural blue sky, soft golden sunset, distant clouds, low camera just above open-ocean water, realistic dark-blue foreground swells, fine ripples, and sparkling golden reflected light. Preserve the visual identity and lighting of the reference. Compose the straight horizon at about 66-67 percent down from the top, the sun near the right three-quarter point, generous clear sky above, gently rolling detailed sea below, natural foreground depth of field. Reframe naturally for 16:9, avoid stretching or squeezing. This must be only the natural ocean and sky: absolutely no text, letters, logos, UI, buttons, icons, navigation, borders, frames, watermarks, people, boats, birds, land or buildings. No painterly or CGI look, no plastic waves, no repeated identical wave patterns. One single horizontal image, sharp photographic detail, suitable as the start frame of a calm live-action ocean loop.
+
+提示参考：https://docs.cloud.google.com/vertex-ai/generative-ai/docs/video/best-practice

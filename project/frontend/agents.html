@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>智能体查询平台 — ChaoXing LiaoNing</title>
+  <meta name="description" content="检索与查阅智能体案例信息，支持关键词搜索、学科 / 学校筛选与详情展开。" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body class="agents-page">
+  <header class="app-topbar">
+    <div class="app-topbar-left">
+      <a class="app-back" href="/">&larr; 返回首页</a>
+      <div class="app-title">智能体查询平台<span class="app-title-sub">Agent Library</span></div>
+    </div>
+    <div class="app-topbar-right" id="session-area">
+      <div class="session-chip" id="session-loading">会话加载中…</div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="page-head">
+      <span class="page-eyebrow">Query Console</span>
+      <h1>检索智能体案例</h1>
+      <p>按名称、简介、学科、学校、课程或痛点检索智能体案例；点击任意卡片展开完整信息明细。</p>
+      <button class="btn btn-primary" id="agent-chat-open" type="button">对话找智能体</button>
+    </div>
+
+    <form class="search-bar" id="search-form" role="search" autocomplete="off">
+      <label class="search-field">
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="M12.8 12.8 17 17" /></svg>
+        <input class="search-input" id="search-input" type="search" name="q" placeholder="输入关键词，例如：名称、学科、课程、痛点" aria-label="搜索智能体" />
+      </label>
+      <button class="btn btn-primary" type="submit" id="search-submit">搜索</button>
+      <button class="btn btn-ghost" type="button" id="search-reset">重置</button>
+    </form>
+
+    <div class="filter-bar" id="filter-bar" hidden>
+      <label class="filter-field">
+        <span class="filter-label">学科门类</span>
+        <select class="input filter-select" id="filter-discipline"><option value="">全部学科</option></select>
+      </label>
+      <label class="filter-field">
+        <span class="filter-label">所属学校</span>
+        <select class="input filter-select" id="filter-school"><option value="">全部学校</option></select>
+      </label>
+      <label class="filter-field">
+        <span class="filter-label">状态</span>
+        <select class="input filter-select" id="filter-status">
+          <option value="">全部状态</option>
+          <option value="active">已启用</option>
+          <option value="inactive">未启用</option>
+        </select>
+      </label>
+      <button class="btn btn-ghost btn-sm" type="button" id="filter-clear">清空筛选</button>
+      <span class="filter-count mono" id="filter-count"></span>
+    </div>
+
+    <div class="result-meta" id="result-meta" aria-live="polite"></div>
+
+    <div class="card-grid" id="agent-grid">
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+    </div>
+    <nav class="agents-pagination" id="agent-pagination" aria-label="案例分页" hidden>
+      <button class="btn btn-ghost" id="agents-prev" type="button">上一页</button>
+      <span id="agents-page-info" aria-live="polite"></span>
+      <button class="btn btn-ghost" id="agents-next" type="button">下一页</button>
+    </nav>
+  </main>
+
+  <div class="modal-backdrop agent-chat-backdrop" id="agent-chat-backdrop" hidden>
+    <section class="modal modal-agent-chat" role="dialog" aria-modal="true" aria-labelledby="agent-chat-title">
+      <div class="modal-head">
+        <div>
+          <h2 class="modal-title" id="agent-chat-title">对话找智能体</h2>
+          <p class="modal-subtitle">描述你的课程、专业或需要解决的问题。</p>
+        </div>
+        <button class="modal-close" id="agent-chat-close" type="button" aria-label="关闭对话查找">&times;</button>
+      </div>
+      <div class="modal-body agent-chat-body">
+        <p class="field-hint" id="agent-chat-availability">描述你的学科、课程或遇到的痛点，发送后查看匹配案例与推荐理由。</p>
+        <div class="agent-chat-messages" id="agent-chat-messages" role="log" aria-label="查找对话" aria-live="polite"></div>
+        <form class="agent-chat-form" id="agent-chat-form">
+          <label for="agent-chat-input">你的需求</label>
+          <textarea class="input" id="agent-chat-input" rows="3" maxlength="2000" required placeholder="例如：我需要一个能帮助学生预习化学实验的智能体"></textarea>
+          <button class="btn btn-primary" id="agent-chat-send" type="submit">发送需求</button>
+          <p class="field-hint" id="agent-chat-status" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <!-- 详情弹窗 -->
+  <div class="modal-backdrop" id="detail-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+      <div class="modal-head">
+        <div class="modal-head-text">
+          <h2 class="modal-title" id="detail-title">智能体详情</h2>
+          <p class="modal-subtitle" id="detail-subtitle"></p>
+        </div>
+        <button class="modal-close" id="detail-close" type="button" aria-label="关闭详情">&times;</button>
+      </div>
+      <div class="modal-body" id="detail-body"></div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+
+  <script type="module" src="js/agents.js"></script>
+</body>
+</html>

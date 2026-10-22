@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>管理端 — 智能体信息维护</title>
+  <meta name="description" content="管理员维护智能体案例信息：查看、新增、编辑、删除智能体记录并上传案例封面。" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <script src="js/admin-theme.js"></script>
+  <link rel="stylesheet" href="app.css" />
+  <link rel="stylesheet" href="admin-theme.css" />
+</head>
+<body>
+  <header class="app-topbar">
+    <div class="app-topbar-left">
+      <a class="app-back" href="/">&larr; 返回首页</a>
+      <a class="app-back" href="/agents.html">查询平台 &rarr;</a>
+      <div class="app-title">管理端<span class="app-title-sub">Admin Console</span></div>
+    </div>
+    <div class="app-topbar-right">
+      <button class="btn btn-sm" id="admin-theme-toggle" type="button" aria-pressed="false" aria-label="切换为明亮配色">☀ 明亮模式</button>
+      <div class="app-topbar-right" id="session-area">
+        <div class="session-chip" id="session-loading">会话加载中…</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="page-head">
+      <span class="page-eyebrow">Administration</span>
+      <h1>智能体信息维护</h1>
+      <p>管理端仅对已登录的管理员开放：可查看全部记录，并新增、编辑、删除智能体案例。普通用户与未登录访客不可见、不可操作。</p>
+    </div>
+
+    <!-- 门禁区：按会话状态切换 -->
+    <div class="gate" id="gate" hidden>
+      <div class="gate-title" id="gate-title">需要管理员身份</div>
+      <p id="gate-copy"></p>
+      <div id="gate-actions"></div>
+    </div>
+
+    <div id="admin-content" hidden>
+      <!-- 概览统计 -->
+      <section class="panel stats-panel">
+        <div class="panel-head row-between">
+          <div>
+            <h2>数据概览</h2>
+            <p>记录总数与学科 / 学校分布；新增或编辑后自动刷新。</p>
+          </div>
+          <button class="btn btn-ghost btn-sm" type="button" id="refresh-all">刷新全部</button>
+        </div>
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-card stat-card-total">
+            <div class="stat-value mono" id="stat-total">—</div>
+            <div class="stat-label">记录总数</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-title">学科分布</div>
+            <div class="chip-list" id="stat-disciplines"><span class="muted">加载中…</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-title">学校分布（Top 20）</div>
+            <div class="chip-list" id="stat-schools"><span class="muted">加载中…</span></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="admin-grid">
+        <!-- 现有记录 -->
+        <section class="panel">
+          <div class="panel-head row-between">
+            <div>
+              <h2>现有智能体记录</h2>
+              <p>共 <span class="mono" id="agent-total">0</span> 条；点击名称查看案例，点击浏览人数查看访客明细，右侧可编辑 / 删除。</p>
+            </div>
+            <div class="row-between">
+              <button class="btn btn-ghost btn-sm" type="button" id="card-effects-open">卡片效果</button>
+              <button class="btn btn-primary btn-sm" type="button" id="agent-create">新增智能体</button>
+              <button class="btn btn-ghost btn-sm" type="button" id="refresh-list">刷新</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col" class="cell-cover-th">封面</th>
+                  <th scope="col">名称</th>
+                  <th scope="col">学科 / 学校</th>
+                  <th scope="col">状态</th>
+                  <th scope="col" class="cell-views">浏览人数 / 次数</th>
+                  <th scope="col">更新时间</th>
+                  <th scope="col" class="cell-actions-th">操作</th>
+                </tr>
+              </thead>
+              <tbody id="agent-rows"></tbody>
+            </table>
+          </div>
+          <div class="empty-state" id="agent-empty" hidden style="margin-top: 1rem">
+            <div class="empty-state-title">暂无记录</div>
+            <p>点击“新增智能体”创建第一条记录。</p>
+          </div>
+        </section>
+      </div>
+
+      <div class="modal-backdrop" id="card-effects-backdrop" hidden>
+        <section class="modal modal-card-effects" role="dialog" aria-modal="true" aria-labelledby="card-effects-title">
+          <div class="modal-head">
+            <div class="modal-head-text">
+              <h2 class="modal-title" id="card-effects-title">卡片效果</h2>
+              <p class="modal-subtitle">调节颜色、明暗、流动与鼠标交互，左侧实时预览热门卡片。</p>
+            </div>
+            <button class="modal-close" id="card-effects-close" type="button" aria-label="关闭卡片效果">&times;</button>
+          </div>
+          <div class="modal-body card-effects-layout">
+            <div class="card-effects-preview">
+              <p class="section-label">实时预览</p>
+              <label class="field-hint" for="card-effects-rank">预览卡片</label>
+              <select class="input" id="card-effects-rank">
+                <option value="1">热门 TOP 1</option>
+                <option value="2">热门 TOP 2</option>
+                <option value="3">热门 TOP 3</option>
+              </select>
+              <article class="agent-card agent-card-hot" id="card-effects-preview-card">
+                <div class="agent-card-cover"><img src="images/demo/course-qa.svg" alt="课程问答案例封面" /></div>
+                <span class="agent-popularity" id="card-effects-preview-rank">热门 TOP 1 预览</span>
+                <div class="agent-card-name">课程知识问答助手</div>
+                <p class="agent-card-summary">预览卡片的火焰颜色与流动效果，移动鼠标检查高光和文字是否清晰。</p>
+                <div class="agent-card-meta"><span class="meta-item"><em>专业</em>计算机科学与技术</span><span class="meta-item"><em>学校</em>示例大学</span></div>
+                <div class="agent-card-foot"><span class="status-dot" data-status="active">已启用</span><span>效果预览</span></div>
+                <div class="agent-card-actions"><span class="agent-link">打开智能体 ↗</span></div>
+              </article>
+              <p class="field-hint">调整后可把鼠标移到卡片上，检查流体跟随与倾斜效果。</p>
+            </div>
+            <form id="card-effects-form">
+              <div id="card-effects-controls"></div>
+              <div class="form-actions">
+                <button class="btn btn-primary" id="card-effects-save" type="submit" disabled>保存并应用</button>
+                <button class="btn btn-ghost" id="card-effects-reset" type="button">恢复默认</button>
+                <button class="btn btn-ghost" id="card-effects-retry" type="button" hidden>重新读取</button>
+              </div>
+              <p class="field-hint" id="card-effects-status" role="status" aria-live="polite">调节后点击“保存并应用”，新打开或刷新的查询页将使用此配置。</p>
+            </form>
+          </div>
+        </section>
+      </div>
+
+        <!-- 新增 / 编辑表单 -->
+      <div class="modal-backdrop" id="form-backdrop" hidden>
+        <section class="modal modal-form" role="dialog" aria-modal="true" aria-labelledby="form-title">
+          <div class="modal-head">
+            <div class="modal-head-text">
+              <h2 class="modal-title" id="form-title">新增智能体</h2>
+              <p class="modal-subtitle" id="form-hint">填写名称后即可提交；学科、学校、封面等字段会直接展示在查询平台卡片与详情中。</p>
+            </div>
+            <button class="modal-close" type="button" id="form-close" aria-label="关闭表单">&times;</button>
+          </div>
+
+          <div class="modal-body" id="form-body">
+          <div class="notice" id="create-notice" role="status" aria-live="polite" hidden></div>
+
+          <form id="agent-form" novalidate>
+            <p class="section-label">基本信息</p>
+
+            <div class="field">
+              <label for="field-name">智能体名称<span class="req">*</span></label>
+              <input class="input" id="field-name" name="name" type="text" maxlength="120" placeholder="例如：课程知识问答智能体" required />
+              <p class="field-hint">必填，最多 120 字。</p>
+            </div>
+
+            <div class="field">
+              <label for="field-summary">简介</label>
+              <textarea class="textarea" id="field-summary" name="summary" maxlength="500" placeholder="一句话说明智能体的用途与能力边界"></textarea>
+              <p class="field-hint">选填，最多 500 字。</p>
+            </div>
+
+            <div class="field-grid">
+              <div class="field">
+                <label for="field-discipline">学科门类</label>
+                <input class="input" id="field-discipline" name="discipline" type="text" maxlength="60" placeholder="例如：工学" list="discipline-options" />
+                <datalist id="discipline-options"></datalist>
+                <p class="field-hint">选填，最多 60 字。</p>
+              </div>
+              <div class="field">
+                <label for="field-major">具体专业</label>
+                <input class="input" id="field-major" name="major" type="text" maxlength="60" placeholder="例如：计算机科学与技术" />
+                <p class="field-hint">选填，最多 60 字。</p>
+              </div>
+            </div>
+
+            <div class="field-grid">
+              <div class="field">
+                <label for="field-course">课程名称</label>
+                <input class="input" id="field-course" name="courseName" type="text" maxlength="120" placeholder="例如：数据结构与算法" />
+                <p class="field-hint">选填，最多 120 字。</p>
+              </div>
+              <div class="field">
+                <label for="field-school">所属学校</label>
+                <input class="input" id="field-school" name="schoolName" type="text" maxlength="120" placeholder="例如：示例大学" list="school-options" />
+                <datalist id="school-options"></datalist>
+                <p class="field-hint">选填，最多 120 字。</p>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="field-url">智能体链接</label>
+              <input class="input" id="field-url" name="agentUrl" type="text" maxlength="500" placeholder="https://… 或站内路径 /agents/xxx" />
+              <p class="field-hint">选填，支持 http(s) 绝对地址或站内相对路径（以 / 开头）。</p>
+            </div>
+
+            <p class="section-label">案例内容</p>
+
+            <div class="field">
+              <label for="field-pain">痛点</label>
+              <textarea class="textarea" id="field-pain" name="painPoint" maxlength="2000" placeholder="描述该智能体解决的教学 / 业务痛点"></textarea>
+              <p class="field-hint">选填，最多 2000 字。</p>
+            </div>
+
+            <div class="field">
+              <label for="field-guide">使用说明</label>
+              <textarea class="textarea" id="field-guide" name="usageGuide" maxlength="5000" placeholder="说明如何使用该智能体、适用对象与注意事项"></textarea>
+              <p class="field-hint">选填，最多 5000 字。</p>
+            </div>
+
+            <div class="field">
+              <label for="field-cover">案例封面</label>
+              <div class="upload-row">
+                <div class="cover-preview" id="cover-preview" data-empty="true">
+                  <span class="cover-preview-empty">暂无封面</span>
+                </div>
+                <div class="upload-actions">
+                  <input class="input" id="field-cover" name="coverImage" type="text" maxlength="500" placeholder="/uploads/xxx.png 或 https://…" />
+                  <div class="upload-buttons">
+                    <label class="btn btn-ghost btn-sm file-btn">
+                      选择图片上传
+                      <input type="file" id="cover-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+                    </label>
+                    <button class="btn btn-ghost btn-sm" type="button" id="cover-clear">清除封面</button>
+                    <span class="upload-status mono" id="cover-status"></span>
+                  </div>
+                  <p class="field-hint">支持 PNG / JPG / WebP / GIF，单张不超过 3 MB；也可直接粘贴外链图片地址。</p>
+                </div>
+              </div>
+            </div>
+
+            <p class="section-label">其他</p>
+
+            <div class="field-grid">
+              <div class="field">
+                <label for="field-tags">标签</label>
+                <input class="input" id="field-tags" name="tags" type="text" maxlength="200" placeholder="用逗号分隔，例如：问答,课程,知识库" />
+                <p class="field-hint">选填，最多 200 字。</p>
+              </div>
+              <div class="field">
+                <label for="field-status">状态</label>
+                <select class="input" id="field-status" name="status">
+                  <option value="active">已启用</option>
+                  <option value="inactive">未启用</option>
+                </select>
+                <p class="field-hint">未启用的记录在查询平台仍可见，但标记为未启用。</p>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="field-data">扩展字段（JSON）</label>
+              <textarea class="textarea textarea-mono" id="field-data" name="data" placeholder='{"场景":"课程答疑","能力":"检索增强问答"}'></textarea>
+              <p class="field-hint">选填，JSON 对象，键值对会直接展示在查询平台详情中。</p>
+            </div>
+
+            <div class="form-actions">
+              <button class="btn btn-primary" type="submit" id="form-submit">提交新增</button>
+              <button class="btn btn-ghost" type="button" id="form-draft">暂存草稿</button>
+              <button class="btn btn-ghost" type="reset" id="form-reset">清空表单</button>
+              <button class="btn btn-ghost" type="button" id="form-cancel" hidden>取消编辑</button>
+            </div>
+            <p class="field-hint" id="form-draft-hint">草稿仅保存在当前浏览器；重新打开可继续填写，已上传封面地址一并保留。</p>
+          </form>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <!-- 只读详情弹窗（复用查询平台样式） -->
+  <div class="modal-backdrop" id="detail-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+      <div class="modal-head">
+        <div class="modal-head-text">
+          <h2 class="modal-title" id="detail-title">记录明细</h2>
+          <p class="modal-subtitle" id="detail-subtitle"></p>
+        </div>
+        <button class="modal-close" id="detail-close" type="button" aria-label="关闭明细">&times;</button>
+      </div>
+      <div class="modal-body" id="detail-body"></div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+
+  <script type="module" src="js/admin.js"></script>
+</body>
+</html>

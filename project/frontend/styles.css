@@ -1,0 +1,397 @@
+/* ===========================================================================
+   Human Synthesis Header — The World
+   还原基准：doc/restore-spec.md
+   断点映射：默认 <640px / sm ≥640px / md ≥768px（对应参考实现 Tailwind 断点）
+   =========================================================================== */
+
+/* ---- 字体：Anybody（OFL 开源，本地 woff2，可变字重） ---- */
+@font-face {
+  font-family: 'Anybody';
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 75% 125%;
+  font-display: swap;
+  src: url('fonts/anybody-latin.woff2') format('woff2');
+}
+
+/* ---- 基础 ---- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: #000000;
+  color: #ffffff;
+  font-family: 'Anybody', sans-serif;
+  overflow-x: hidden;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+/* ===========================================================================
+   双层滚动结构
+   =========================================================================== */
+
+/* 外层：750vh 滚动行程 */
+.hero-scroll {
+  position: relative;
+  width: 100vw;
+  height: 750vh;
+  background: #000000;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 内层：固定满屏视口 */
+.hero-viewport {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh; /* 移动端地址栏收缩时保持稳定（渐进增强） */
+  overflow: hidden;
+}
+
+.webgl-layer {
+  width: 100%;
+  height: 100%;
+}
+
+.webgl-layer canvas {
+  display: block;
+}
+
+/* ---- WebGL 降级提示（默认隐藏，main.js 检测失败或初始化异常时显示） ---- */
+.webgl-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.875rem;
+  padding: 2rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+.webgl-fallback[hidden] {
+  display: none;
+}
+
+.webgl-fallback-title {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #c77dff;
+}
+
+.webgl-fallback-copy {
+  margin: 0;
+  max-width: 26rem;
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ===========================================================================
+   DOM 覆盖层
+   =========================================================================== */
+
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1.5rem; /* p-6 */
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: opacity 150ms;
+}
+
+/* ---- 顶部行：品牌 + 导航 ---- */
+.overlay-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+  margin-top: 1rem; /* mt-4 */
+}
+
+.brand {
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 30px;
+  line-height: 30px;
+  text-transform: capitalize;
+  letter-spacing: -0.025em; /* tracking-tight */
+}
+
+.main-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem; /* space-y-2 */
+  text-align: right;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  text-transform: uppercase;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem; /* space-x-2 */
+  cursor: pointer;
+  pointer-events: auto;
+  transition: color 150ms;
+}
+
+.nav-label {
+  transition: color 150ms;
+}
+
+.nav-item:hover .nav-label {
+  color: #00ffd1;
+}
+
+.nav-bullet {
+  color: #00ffff;
+  font-weight: 700;
+}
+
+/* ===========================================================================
+   相位文案（四组）
+   =========================================================================== */
+
+.phase {
+  position: absolute;
+  bottom: 1.5rem; /* bottom-6 */
+  left: 1.5rem;   /* left-6 */
+  right: 1.5rem;  /* right-6 */
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-end;
+  margin-bottom: 1rem; /* mb-4 */
+  transition: opacity 150ms;
+  pointer-events: none;
+}
+
+/* ---- 相位内部网格：左标题 + 右段落 ---- */
+.phase-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem; /* gap-8 */
+  align-items: end;
+  width: 100%;
+}
+
+.phase-title-col {
+  max-width: 36rem; /* max-w-xl */
+}
+
+.phase-copy-col {
+  max-width: 28rem; /* max-w-md */
+}
+
+/* ---- 标题 ---- */
+.title-xl,
+.title-lg {
+  color: #ffffff;
+  font-style: normal;
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: pre-line;
+  pointer-events: auto;
+}
+
+.title-xl {
+  font-size: 52px;
+  line-height: 50px;
+  letter-spacing: -0.025em; /* tracking-tight */
+}
+
+.title-lg {
+  font-size: 42px;
+  line-height: 44px;
+  letter-spacing: -0.05em; /* tracking-tighter */
+}
+
+.title-capped {
+  width: 1050px;
+  max-width: 100%;
+}
+
+/* ---- P1 标题「Agent Case / Library」两行定型 ----
+   新文案行宽（135px 时「Agent Case」≈760px）超过原列宽上限 36rem，
+   会在「Agent-Case」间折出第三行。处理：
+   1. 标题列放开 36rem 上限，改由网格轨道给宽；
+   2. 列设为查询容器，字号 = min(断点设计值, 17.5cqw)（略留安全余量，
+      保证「Agent Case」始终单行），窄视口平滑降档、宽视口保持 52/96/135 设计值；
+   3. 行高改 0.95em 跟随字号缩放（与原 50/92/128 的比值一致）。
+   注：column 容器为 inline-size containment，列宽不受内容回馈，无循环依赖。 */
+.phase-p1 .phase-title-col {
+  max-width: none;
+  container-type: inline-size;
+}
+
+.phase-p1 .title-xl {
+  font-size: clamp(44px, 17.5cqw, 52px);
+  line-height: 0.95em;
+}
+
+/* ---- 眉标（P4） ---- */
+.eyebrow {
+  display: block;
+  margin-top: 1rem; /* mt-4 */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.75rem; /* text-xs */
+  font-weight: 600;
+  line-height: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  color: #c77dff;
+  pointer-events: auto;
+}
+
+/* ---- 段落 ---- */
+.copy {
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 300;
+  font-size: 14px;
+  line-height: 22px;
+  letter-spacing: normal;
+  pointer-events: auto;
+}
+
+/* ===========================================================================
+   响应式断点
+   =========================================================================== */
+
+/* ---- sm ≥ 640px ---- */
+@media (min-width: 640px) {
+  .hero-overlay {
+    padding: 3rem; /* p-12 */
+  }
+
+  .overlay-top {
+    margin-top: 0;
+  }
+
+  .main-nav {
+    gap: 1rem; /* space-y-4 */
+    font-size: 18px;
+  }
+
+  .nav-item {
+    gap: 0.75rem; /* space-x-3 */
+  }
+
+  .phase {
+    bottom: 3rem; /* bottom-12 */
+    left: 3rem;
+    right: 3rem;
+    margin-bottom: 0;
+  }
+
+  .title-xl {
+    font-size: 96px;
+    line-height: 92px;
+  }
+
+  .phase-p1 .title-xl {
+    font-size: clamp(56px, 17.5cqw, 96px);
+  }
+
+  .title-lg {
+    font-size: 72px;
+    line-height: 72px;
+  }
+
+  .copy {
+    font-size: 16px;
+    line-height: 26px;
+  }
+}
+
+/* ---- md ≥ 768px ---- */
+@media (min-width: 768px) {
+  .hero-overlay {
+    padding: 4rem; /* p-16 */
+  }
+
+  .main-nav {
+    gap: 1.25rem; /* space-y-5 */
+    font-size: 22px;
+  }
+
+  .phase {
+    bottom: 4rem; /* bottom-16 */
+    left: 4rem;
+    right: 4rem;
+  }
+
+  .phase-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* P1：标题列加宽（135px 时「Agent Case」≈760px，需 ≥771px 轨道），
+     字号保持 17.2cqw 校准公式、上限回到 135px 设计值 */
+  .phase-p1 .phase-grid {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  }
+
+  .phase-p1 .title-xl {
+    font-size: clamp(56px, 17.5cqw, 135px);
+  }
+
+  .phase-copy-col {
+    margin-left: auto; /* md:ml-auto */
+  }
+
+  .title-xl {
+    font-size: 135px;
+    line-height: 128px;
+  }
+
+  .title-lg {
+    font-size: 105px;
+    line-height: 100px;
+  }
+
+  .copy {
+    font-size: 18px;
+    line-height: 30px;
+  }
+}
+
+/* ---- 减少动效偏好：保留滚动形变（核心视觉），禁用瞬时过渡 ---- */
+@media (prefers-reduced-motion: reduce) {
+  .phase,
+  .hero-overlay,
+  .nav-item,
+  .nav-label {
+    transition: none;
+  }
+}
