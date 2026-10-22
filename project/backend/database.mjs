@@ -9,7 +9,8 @@
  *   - 时间一律毫秒时间戳（number）
  *   - 所有写操作通过预编译语句参数化，杜绝字符串拼接
  */
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -83,6 +84,8 @@ const VIEW_STATS_COLUMNS = `
 
 export function createDatabase({ databasePath, now = Date.now }) {
   const schema = readFileSync(SCHEMA_URL, 'utf8');
+  // 确保数据库父目录存在（生产环境 DB_PATH 指向 /tmp 子目录时必需）
+  mkdirSync(dirname(databasePath), { recursive: true });
   const database = new DatabaseSync(databasePath);
   database.exec('PRAGMA journal_mode = WAL;');
   database.exec('PRAGMA foreign_keys = ON;');

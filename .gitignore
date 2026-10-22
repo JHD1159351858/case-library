@@ -19,3 +19,4 @@ dist/
 utils/verify/shots/
 utils/verify/chrome-profile*/
 *.log
+prod.env

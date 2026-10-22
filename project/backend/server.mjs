@@ -27,6 +27,7 @@ import { extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createDatabase, projectRoot } from './database.mjs';
+import { createPgStorage } from './pg-storage.mjs';
 import { CARD_EFFECT_FIELDS, DEFAULT_CARD_EFFECT_SETTINGS, normalizeCardEffectSettings } from '../frontend/js/card-effect-settings.js';
 
 export const SESSION_COOKIE_NAME = 'agent_site_session';
@@ -76,7 +77,9 @@ export function parseEnvConfig(environment = process.env, overrides = {}) {
 
   const port = Number.parseInt(String(pick('port', pick('BACKEND_PORT', pick('PORT', 2001)))), 10) || 2001;
   const host = String(pick('host', environment.BACKEND_HOST ?? '127.0.0.1'));
-  const appPublicUrl = trimEndSlash(String(pick('appPublicUrl', environment.APP_PUBLIC_URL ?? `http://127.0.0.1:${port}`)));
+  const appPublicUrlOverride = overrides.appPublicUrl !== undefined ? String(overrides.appPublicUrl) : String(environment.APP_PUBLIC_URL ?? '');
+  const appPublicUrlExplicit = Boolean(appPublicUrlOverride.trim());
+  const appPublicUrl = trimEndSlash(appPublicUrlExplicit ? appPublicUrlOverride : `http://127.0.0.1:${port}`);
   const ssoCenterUrl = trimEndSlash(String(pick('ssoCenterUrl', environment.SSO_CENTER_URL ?? '')));
   const ssoSharedSecret = String(pick('ssoSharedSecret', environment.SSO_SHARED_SECRET ?? ''));
 
@@ -98,6 +101,7 @@ export function parseEnvConfig(environment = process.env, overrides = {}) {
     port,
     host,
     appPublicUrl,
+    appPublicUrlExplicit,
     ssoCenterUrl,
     ssoSharedSecret,
     allowedReturnOrigins: allowedOrigins,
@@ -107,6 +111,21 @@ export function parseEnvConfig(environment = process.env, overrides = {}) {
     frontendDir,
     uploadsDir
   };
+}
+
+/**
+ * 从请求头推导本服务对外 origin（反向代理/网关后自动适配任意域名）。
+ * 优先 x-forwarded-proto + x-forwarded-host，回退 host；本地地址默认 http，其余默认 https。
+ * @param {import('node:http').IncomingMessage} request
+ * @returns {string} 形如 https://example.com 的 origin；无法推导返回 ''
+ */
+export function requestPublicOrigin(request) {
+  const proto = String(request.headers['x-forwarded-proto'] ?? '').split(',')[0].trim();
+  const host = String(request.headers['x-forwarded-host'] ?? request.headers.host ?? '').split(',')[0].trim();
+  if (!host) return '';
+  const isLocal = /^(127\.0\.0\.1|localhost|\[?::1\]?)(:\d+)?$/i.test(host);
+  const scheme = proto || (isLocal ? 'http' : 'https');
+  return `${scheme}://${host}`;
 }
 
 function safeOrigin(value) {
@@ -741,10 +760,10 @@ function serveStatic(request, response, pathname, config) {
  */
 export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date.now, logger = console, agentChatProvider }) {
   /** 当前请求的登录用户（无会话返回 null） */
-  function currentUser(request) {
+  async function currentUser(request) {
     const token = cookieValue(request, SESSION_COOKIE_NAME);
     if (!token) return null;
-    const found = db.findSessionUser(hashToken(token), now());
+    const found = await db.findSessionUser(hashToken(token), now());
     return found ? found.user : null;
   }
 
@@ -763,21 +782,36 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     return cookieValue(request, SESSION_COOKIE_NAME);
   }
 
+  // 对外绝对地址基座：显式配置了 APP_PUBLIC_URL 用配置；否则按请求头动态推导（适配任意部署域名，零配置）
+  function publicBase(request) {
+    if (config.appPublicUrlExplicit) return config.appPublicUrl;
+    return requestPublicOrigin(request) || config.appPublicUrl;
+  }
+
+  // return_to 白名单校验：静态白名单之外，始终放行本请求自身 origin（同源回跳天然可信）
+  function resolveReturnToForRequest(returnTo, request) {
+    const ownOrigin = safeOrigin(publicBase(request));
+    const allowed = ownOrigin && !config.allowedReturnOrigins.includes(ownOrigin)
+      ? [...config.allowedReturnOrigins, ownOrigin]
+      : config.allowedReturnOrigins;
+    return resolveReturnTo(returnTo, { ...config, allowedReturnOrigins: allowed });
+  }
+
   async function handleStart(request, response, url) {
-    const fail = (reason) => redirect(response, `${config.appPublicUrl}/?scene=last&login_error=${encodeURIComponent(reason)}`);
+    const fail = (reason) => redirect(response, `${publicBase(request)}/?scene=last&login_error=${encodeURIComponent(reason)}`);
     if (!config.ssoCenterUrl) {
       logger.warn('[sso] SSO_CENTER_URL 未配置，无法发起登录');
       return fail('sso_not_configured');
     }
     const requested = url.searchParams.get('return_to');
-    const resolved = resolveReturnTo(requested, config);
-    const returnTo = resolved ?? defaultCallbackUrl(config.appPublicUrl);
+    const resolved = resolveReturnToForRequest(requested, request);
+    const returnTo = resolved ?? defaultCallbackUrl(publicBase(request));
     if (requested && !resolved) logger.warn('[sso] return_to 未命中白名单，已忽略:', requested);
     return redirect(response, buildSsoStartUrl({ ssoCenterUrl: config.ssoCenterUrl, returnTo }));
   }
 
   async function handleCallback(request, response, url) {
-    const fail = (reason) => redirect(response, `${config.appPublicUrl}/?scene=last&login_error=${encodeURIComponent(reason)}`);
+    const fail = (reason) => redirect(response, `${publicBase(request)}/?scene=last&login_error=${encodeURIComponent(reason)}`);
     const ticket = String(url.searchParams.get('ticket') ?? '').trim();
     if (!ticket) return fail('missing_ticket');
     if (!config.ssoCenterUrl || !config.ssoSharedSecret) {
@@ -806,9 +840,9 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     try {
       const timestamp = now();
       const isAdmin = isAdminIdentity(identity, config);
-      const user = db.upsertUserFromIdentity(identity, isAdmin, timestamp);
+      const user = await db.upsertUserFromIdentity(identity, isAdmin, timestamp);
       const token = generateToken();
-      db.createSession({
+      await db.createSession({
         userId: user.id,
         tokenHash: hashToken(token),
         expiresAt: timestamp + SESSION_TTL_MS,
@@ -818,34 +852,34 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
       // 登录后按角色分流：管理员直达管理端（可新增智能体），普通用户直达查询平台
       const landing = isAdmin ? '/admin.html' : '/agents.html';
       logger.info(`[sso] 登录成功 uid=${identity.ssoUid} isAdmin=${isAdmin} → ${landing}`);
-      return redirect(response, `${config.appPublicUrl}${landing}?login=ok`);
+      return redirect(response, `${publicBase(request)}${landing}?login=ok`);
     } catch (error) {
       logger.error('[sso] 建立会话失败:', error);
       return fail('session_failed');
     }
   }
 
-  function handleMe(request, response) {
-    const user = currentUser(request);
+  async function handleMe(request, response) {
+    const user = await currentUser(request);
     if (!user) return sendJson(response, 200, { user: null, ssoEnabled: Boolean(config.ssoCenterUrl) });
     const isAdmin = computeIsAdmin(user, config);
-    if ((user.is_admin ? 1 : 0) !== (isAdmin ? 1 : 0)) db.updateAdminFlag(user.id, isAdmin, now());
+    if ((user.is_admin ? 1 : 0) !== (isAdmin ? 1 : 0)) await db.updateAdminFlag(user.id, isAdmin, now());
     return sendJson(response, 200, { user: publicUser(user), ssoEnabled: Boolean(config.ssoCenterUrl) });
   }
 
-  function handleLogout(request, response) {
+  async function handleLogout(request, response) {
     const token = sessionTokenOf(request);
-    if (token) db.deleteSession(hashToken(token));
+    if (token) await db.deleteSession(hashToken(token));
     response.setHeader('Set-Cookie', serializeSessionCookie('', 0, { secure: isSecureRequest(request) }));
-    const returnTo = `${config.appPublicUrl}/?scene=last&logout=1`;
+    const returnTo = `${publicBase(request)}/?scene=last&logout=1`;
     return sendJson(response, 200, {
       ok: true,
       logoutUrl: buildSsoLogoutUrl({ ssoCenterUrl: config.ssoCenterUrl, returnTo })
     });
   }
 
-  function handleCardEffectSettings(request, response) {
-    const saved = db.cardEffectSettings();
+  async function handleCardEffectSettings(request, response) {
+    const saved = await db.cardEffectSettings();
     return sendJson(response, 200, {
       settings: normalizeCardEffectSettings(saved?.settings ?? DEFAULT_CARD_EFFECT_SETTINGS),
       updatedAt: saved?.updatedAt ?? null
@@ -853,12 +887,12 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
   }
 
   async function handleSaveCardEffectSettings(request, response) {
-    const user = currentUser(request);
+    const user = await currentUser(request);
     if (!user) return sendJson(response, 401, { error: 'authentication_required' });
     if (!computeIsAdmin(user, config)) return sendJson(response, 403, { error: 'admin_required' });
     const origin = request.headers.origin;
     const fetchSite = String(request.headers['sec-fetch-site'] ?? '').toLowerCase();
-    if ((origin !== undefined && safeOrigin(origin) !== safeOrigin(config.appPublicUrl))
+    if ((origin !== undefined && safeOrigin(origin) !== safeOrigin(publicBase(request)))
       || fetchSite === 'cross-site' || fetchSite === 'same-site') {
       return sendJson(response, 403, { error: 'cross_origin_forbidden' });
     }
@@ -877,20 +911,21 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
       })) {
       return sendJson(response, 400, { error: 'invalid_card_effect_settings' });
     }
-    return sendJson(response, 200, db.saveCardEffectSettings(normalizeCardEffectSettings(settings), now()));
+    const saved = await db.saveCardEffectSettings(normalizeCardEffectSettings(settings), now());
+    return sendJson(response, 200, saved);
   }
 
-  function handleListAgents(request, response, url) {
+  async function handleListAgents(request, response, url) {
     const keyword = url.searchParams.get('q') ?? '';
     const discipline = url.searchParams.get('discipline') ?? '';
     const school = url.searchParams.get('school') ?? '';
     const status = url.searchParams.get('status') ?? '';
     const limit = Number.parseInt(url.searchParams.get('limit') ?? '100', 10);
     const offset = Number.parseInt(url.searchParams.get('offset') ?? '0', 10);
-    const { items, total } = db.listAgents({ query: keyword, discipline, school, status, limit, offset });
-    const user = currentUser(request);
+    const { items, total } = await db.listAgents({ query: keyword, discipline, school, status, limit, offset });
+    const user = await currentUser(request);
     const isAdmin = user && computeIsAdmin(user, config);
-    const viewStats = db.agentViewStatsForAgents(items.map((item) => item.id));
+    const viewStats = await db.agentViewStatsForAgents(items.map((item) => item.id));
     return sendJson(response, 200, {
       items: items.map((row) => {
         const stats = viewStats.get(row.id);
@@ -905,12 +940,12 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     });
   }
 
-  function handleAgentStats(request, response) {
-    return sendJson(response, 200, db.agentStats());
+  async function handleAgentStats(request, response) {
+    return sendJson(response, 200, await db.agentStats());
   }
 
-  function handleAgentDetail(request, response, agentId) {
-    const row = db.findAgentById(agentId);
+  async function handleAgentDetail(request, response, agentId) {
+    const row = await db.findAgentById(agentId);
     if (!row) return sendJson(response, 404, { error: 'agent_not_found' });
     return sendJson(response, 200, { item: agentDetail(row) });
   }
@@ -919,7 +954,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
   async function handleAgentChat(request, response) {
     const origin = request.headers.origin;
     const fetchSite = String(request.headers['sec-fetch-site'] ?? '').toLowerCase();
-    if ((origin !== undefined && safeOrigin(origin) !== safeOrigin(config.appPublicUrl))
+    if ((origin !== undefined && safeOrigin(origin) !== safeOrigin(publicBase(request)))
       || fetchSite === 'cross-site' || fetchSite === 'same-site') {
       request.resume();
       return sendJson(response, 403, { error: 'cross_origin_forbidden' });
@@ -931,8 +966,9 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     if (typeof agentChatProvider !== 'function') return sendJson(response, 503, { error: 'ai_not_configured' });
 
     // 当前候选范围为按现有列表排序的前 500 条启用案例；读取完整公开详情，不含访客或登录身份。
-    const agents = db.listAgents({ status: 'active', limit: 500 }).items
-      .map((row) => agentDetail(db.findAgentById(row.id)));
+    const agentRows = (await db.listAgents({ status: 'active', limit: 500 })).items;
+    const agents = [];
+    for (const row of agentRows) agents.push(agentDetail(await db.findAgentById(row.id)));
     const candidateIds = new Set(agents.map((item) => item.id));
     try {
       const result = await agentChatProvider({ messages, agents });
@@ -960,7 +996,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
       const items = [];
       for (const id of new Set(result.agentIds)) {
         if (!candidateIds.has(id)) continue;
-        const row = db.findAgentById(id);
+        const row = await db.findAgentById(id);
         if (row?.status === 'active') items.push({ ...agentSummary(row), ...recommendations.get(id) });
       }
       items.sort((a, b) => (b.matchScore ?? -1) - (a.matchScore ?? -1));
@@ -972,16 +1008,16 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
   }
 
   /** 前台详情打开后显式记一次浏览；管理员维护与详情读取本身不计数。 */
-  function handleRecordAgentView(request, response, agentId) {
+  async function handleRecordAgentView(request, response, agentId) {
     request.resume(); // 不读取客户端身份字段，只消费并丢弃请求体。
-    if (!db.findAgentById(agentId)) return sendJson(response, 404, { error: 'agent_not_found' });
+    if (!(await db.findAgentById(agentId))) return sendJson(response, 404, { error: 'agent_not_found' });
     const origin = request.headers.origin;
     const fetchSite = String(request.headers['sec-fetch-site'] ?? '').toLowerCase();
-    if ((origin !== undefined && safeOrigin(origin) !== safeOrigin(config.appPublicUrl))
+    if ((origin !== undefined && safeOrigin(origin) !== safeOrigin(publicBase(request)))
       || fetchSite === 'cross-site' || fetchSite === 'same-site') {
       return sendJson(response, 403, { error: 'cross_origin_forbidden' });
     }
-    const user = currentUser(request);
+    const user = await currentUser(request);
     if (user && computeIsAdmin(user, config)) return sendJson(response, 200, { ok: true, recorded: false });
 
     let visitorKey;
@@ -995,20 +1031,21 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
       }
       visitorKey = `a:${hashToken(token)}`;
     }
-    db.recordAgentView({ agentId, visitorKey, userId: user?.id ?? null, timestamp: now() });
+    await db.recordAgentView({ agentId, visitorKey, userId: user?.id ?? null, timestamp: now() });
     return sendJson(response, 200, { ok: true, recorded: true });
   }
 
-  function handleAgentViews(request, response, url, agentId) {
-    const user = currentUser(request);
+  async function handleAgentViews(request, response, url, agentId) {
+    const user = await currentUser(request);
     if (!user) return sendJson(response, 401, { error: 'authentication_required' });
     if (!computeIsAdmin(user, config)) return sendJson(response, 403, { error: 'admin_required' });
-    if (!db.findAgentById(agentId)) return sendJson(response, 404, { error: 'agent_not_found' });
-    const page = db.listAgentViews(agentId, {
+    if (!(await db.findAgentById(agentId))) return sendJson(response, 404, { error: 'agent_not_found' });
+    const page = await db.listAgentViews(agentId, {
       limit: url.searchParams.get('limit') ?? 50,
       offset: url.searchParams.get('offset') ?? 0
     });
-    return sendJson(response, 200, { viewStats: db.agentViewStats(agentId), ...page });
+    const viewStats = await db.agentViewStats(agentId);
+    return sendJson(response, 200, { viewStats, ...page });
   }
 
   /** 读取并校验请求体为对象（读失败直接回响应并返回 null） */
@@ -1029,7 +1066,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
   }
 
   async function handleCreateAgent(request, response) {
-    const user = currentUser(request);
+    const user = await currentUser(request);
     if (!user) return sendJson(response, 401, { error: 'authentication_required' });
     if (!computeIsAdmin(user, config)) return sendJson(response, 403, { error: 'admin_required' });
 
@@ -1061,7 +1098,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
       updatedAt: timestamp
     };
     try {
-      const row = db.insertAgent(record);
+      const row = await db.insertAgent(record);
       logger.info(`[agents] 新增 uid=${user.sso_uid} id=${row.id}`);
       return sendJson(response, 201, { item: agentDetail(row) });
     } catch (error) {
@@ -1072,11 +1109,11 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
 
   /** 更新：未提供的字段保留原值（合并后整行写回） */
   async function handleUpdateAgent(request, response, agentId) {
-    const user = currentUser(request);
+    const user = await currentUser(request);
     if (!user) return sendJson(response, 401, { error: 'authentication_required' });
     if (!computeIsAdmin(user, config)) return sendJson(response, 403, { error: 'admin_required' });
 
-    const existing = db.findAgentById(agentId);
+    const existing = await db.findAgentById(agentId);
     if (!existing) return sendJson(response, 404, { error: 'agent_not_found' });
 
     const body = await readAgentPayload(request, response);
@@ -1104,11 +1141,11 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
       updatedAt: now()
     };
     try {
-      const row = db.updateAgent(record);
+      const row = await db.updateAgent(record);
       logger.info(`[agents] 更新 uid=${user.sso_uid} id=${row.id}`);
       // 封面被替换时回收旧文件（仍被其他记录引用则保留）
       if (existing.cover_image && existing.cover_image !== row.cover_image) {
-        removeUploadIfUnused(existing.cover_image);
+        await removeUploadIfUnused(existing.cover_image);
       }
       return sendJson(response, 200, { item: agentDetail(row) });
     } catch (error) {
@@ -1117,18 +1154,18 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     }
   }
 
-  function handleDeleteAgent(request, response, agentId) {
-    const user = currentUser(request);
+  async function handleDeleteAgent(request, response, agentId) {
+    const user = await currentUser(request);
     if (!user) return sendJson(response, 401, { error: 'authentication_required' });
     if (!computeIsAdmin(user, config)) return sendJson(response, 403, { error: 'admin_required' });
 
-    const existing = db.findAgentById(agentId);
+    const existing = await db.findAgentById(agentId);
     if (!existing) return sendJson(response, 404, { error: 'agent_not_found' });
 
     try {
-      db.deleteAgent(agentId);
+      await db.deleteAgent(agentId);
       logger.info(`[agents] 删除 uid=${user.sso_uid} id=${agentId}`);
-      if (existing.cover_image) removeUploadIfUnused(existing.cover_image);
+      if (existing.cover_image) await removeUploadIfUnused(existing.cover_image);
       return sendJson(response, 200, { ok: true, id: agentId });
     } catch (error) {
       logger.error('[agents] 删除失败:', error);
@@ -1137,9 +1174,9 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
   }
 
   /** 删除不再被引用的站内封面文件（外链忽略；失败仅告警） */
-  function removeUploadIfUnused(coverImage) {
+  async function removeUploadIfUnused(coverImage) {
     if (!coverImage || !coverImage.startsWith(UPLOAD_URL_PREFIX)) return;
-    if (db.isCoverInUse(coverImage)) return;
+    if (await db.isCoverInUse(coverImage)) return;
     const relative = coverImage.slice(UPLOAD_URL_PREFIX.length);
     const filePath = resolve(config.uploadsDir, relative);
     if (filePath !== config.uploadsDir && !filePath.startsWith(config.uploadsDir + sep)) return;
@@ -1152,7 +1189,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
 
   /** 上传封面（multipart/form-data，单文件字段名 file） */
   async function handleUploadCover(request, response) {
-    const user = currentUser(request);
+    const user = await currentUser(request);
     if (!user) return sendJson(response, 401, { error: 'authentication_required' });
     if (!computeIsAdmin(user, config)) return sendJson(response, 403, { error: 'admin_required' });
 
@@ -1212,7 +1249,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
       }
       if (pathname === '/api/auth/me') {
         if (method !== 'GET') return sendJson(response, 405, { error: 'method_not_allowed' });
-        return handleMe(request, response);
+        return await handleMe(request, response);
       }
       if (pathname === '/api/auth/chaoxing/start' || pathname === '/api/auth/sso/start') {
         if (method !== 'GET') return sendJson(response, 405, { error: 'method_not_allowed' });
@@ -1224,22 +1261,22 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
       }
       if (pathname === '/api/auth/logout') {
         if (method !== 'POST') return sendJson(response, 405, { error: 'method_not_allowed' });
-        return handleLogout(request, response);
+        return await handleLogout(request, response);
       }
       if (pathname === '/api/card-effects') {
-        if (method === 'GET') return handleCardEffectSettings(request, response);
+        if (method === 'GET') return await handleCardEffectSettings(request, response);
         if (method === 'PUT') return await handleSaveCardEffectSettings(request, response);
         response.setHeader('Allow', 'GET, PUT');
         return sendJson(response, 405, { error: 'method_not_allowed' });
       }
       if (pathname === '/api/agents') {
-        if (method === 'GET') return handleListAgents(request, response, requestUrl);
+        if (method === 'GET') return await handleListAgents(request, response, requestUrl);
         if (method === 'POST') return await handleCreateAgent(request, response);
         return sendJson(response, 405, { error: 'method_not_allowed' });
       }
       if (pathname === '/api/agents/stats') {
         if (method !== 'GET') return sendJson(response, 405, { error: 'method_not_allowed' });
-        return handleAgentStats(request, response);
+        return await handleAgentStats(request, response);
       }
       if (pathname === '/api/agents/chat') {
         if (method !== 'POST') {
@@ -1260,8 +1297,8 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
         } catch {
           return sendJson(response, 400, { error: 'bad_path' });
         }
-        if (method === 'POST') return handleRecordAgentView(request, response, agentId);
-        if (method === 'GET') return handleAgentViews(request, response, requestUrl, agentId);
+        if (method === 'POST') return await handleRecordAgentView(request, response, agentId);
+        if (method === 'GET') return await handleAgentViews(request, response, requestUrl, agentId);
         return sendJson(response, 405, { error: 'method_not_allowed' });
       }
       const agentMatch = /^\/api\/agents\/([^/]+)$/.exec(pathname);
@@ -1272,9 +1309,9 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
         } catch {
           return sendJson(response, 400, { error: 'bad_path' });
         }
-        if (method === 'GET') return handleAgentDetail(request, response, agentId);
+        if (method === 'GET') return await handleAgentDetail(request, response, agentId);
         if (method === 'PUT' || method === 'PATCH') return await handleUpdateAgent(request, response, agentId);
-        if (method === 'DELETE') return handleDeleteAgent(request, response, agentId);
+        if (method === 'DELETE') return await handleDeleteAgent(request, response, agentId);
         return sendJson(response, 405, { error: 'method_not_allowed' });
       }
       if (pathname.startsWith(UPLOAD_URL_PREFIX)) {
@@ -1333,30 +1370,45 @@ export function agentDetail(row) {
  * 启动后端服务（供 .preview-server.js 与测试脚本调用）
  * @returns {{ server:import('node:http').Server, config:any, db:any }}
  */
-export function startPreviewServer(overrides = {}, { logger = console, agentChatProvider } = {}) {
+export async function startPreviewServer(overrides = {}, { logger = console, agentChatProvider } = {}) {
   const config = parseEnvConfig(process.env, overrides);
-  const db = createDatabase({ databasePath: config.dbPath });
-  db.purgeExpiredSessions(Date.now());
+
+  // 持久化选择：配置了 DATABASE_URL(postgresql://) 走 PostgreSQL；否则用本地 SQLite。
+  const databaseUrl = overrides.databaseUrl ?? process.env.DATABASE_URL ?? process.env.SUPABASE_DATABASE_URL ?? '';
+  let db;
+  let dbLabel;
+  if (databaseUrl.startsWith('postgresql://') || databaseUrl.startsWith('postgres://')) {
+    db = await createPgStorage({ connectionString: databaseUrl });
+    dbLabel = `PostgreSQL ${maskPgUrl(databaseUrl)}`;
+  } else {
+    db = createDatabase({ databasePath: config.dbPath });
+    await db.purgeExpiredSessions(Date.now());
+    dbLabel = `SQLite ${config.dbPath}`;
+  }
+
   const server = createServer(createRequestHandler({ db, config, logger, agentChatProvider }));
 
-  server.listen(config.port, config.host, () => {
-    logger.info('──────────────────────────────────────────────');
-    logger.info(`  站点入口    http://${config.host}:${config.port}/`);
-    logger.info(`  智能体平台  http://${config.host}:${config.port}/agents.html`);
-    logger.info(`  管理端      http://${config.host}:${config.port}/admin.html`);
-    logger.info(`  回调地址    ${defaultCallbackUrl(config.appPublicUrl)}`);
-    logger.info(`  认证中心    ${config.ssoCenterUrl || '（未配置 SSO_CENTER_URL）'}`);
-    logger.info(`  密钥        ${config.ssoSharedSecret ? `已配置（${config.ssoSharedSecret.length} 字符）` : '（未配置 SSO_SHARED_SECRET）'}`);
-    logger.info(`  数据库      ${config.dbPath}`);
-    logger.info(`  封面上传    ${config.uploadsDir}`);
-    logger.info(`  白名单      ${config.allowedReturnOrigins.join(', ') || '（无）'}`);
-    logger.info('──────────────────────────────────────────────');
+  await new Promise((resolveListen, rejectListen) => {
+    server.once('error', rejectListen);
+    server.listen(config.port, config.host, () => {
+      logger.info('──────────────────────────────────────────────');
+      logger.info(`  站点入口    http://${config.host}:${config.port}/`);
+      logger.info(`  智能体平台  http://${config.host}:${config.port}/agents.html`);
+      logger.info(`  管理端      http://${config.host}:${config.port}/admin.html`);
+      logger.info(`  回调地址    ${defaultCallbackUrl(config.appPublicUrl)}`);
+      logger.info(`  认证中心    ${config.ssoCenterUrl || '（未配置 SSO_CENTER_URL）'}`);
+      logger.info(`  密钥        ${config.ssoSharedSecret ? `已配置（${config.ssoSharedSecret.length} 字符）` : '（未配置 SSO_SHARED_SECRET）'}`);
+      logger.info(`  数据库      ${dbLabel}`);
+      logger.info(`  封面上传    ${config.uploadsDir}`);
+      logger.info(`  白名单      ${config.allowedReturnOrigins.join(', ') || '（无）'}`);
+      logger.info('──────────────────────────────────────────────');
+      resolveListen();
+    });
   });
 
   const shutdown = () => {
     server.close(() => {
-      db.close();
-      process.exit(0);
+      Promise.resolve(db.close()).finally(() => process.exit(0));
     });
   };
   process.once('SIGINT', shutdown);
@@ -1365,7 +1417,20 @@ export function startPreviewServer(overrides = {}, { logger = console, agentChat
   return { server, config, db };
 }
 
+/** 日志中遮蔽 PG 连接串里的密码 */
+function maskPgUrl(url) {
+  try {
+    const u = new URL(url);
+    return `${u.protocol}//${u.hostname}:${u.port || '5432'}${u.pathname}`;
+  } catch {
+    return 'PostgreSQL';
+  }
+}
+
 /** 直接执行（node project/backend/server.mjs）时启动服务 */
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  startPreviewServer();
+  startPreviewServer().catch((err) => {
+    console.error('服务启动失败：', err);
+    process.exit(1);
+  });
 }

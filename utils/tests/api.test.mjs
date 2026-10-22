@@ -190,7 +190,7 @@ async function withEnvironment(run, { ssoSecret = 'test-secret-0123456789', cent
   const dir = mkdtempSync(join(tmpdir(), 'agent-site-api-'));
   const sitePort = await getFreePort();
   const center = await startFakeCenter({ secret: centerSecret ?? ssoSecret });
-  const site = startPreviewServer(
+  const site = await startPreviewServer(
     {
       port: sitePort,
       host: '127.0.0.1',
