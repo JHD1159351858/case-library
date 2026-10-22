@@ -1,0 +1,40 @@
+/* Shared only by the two homepages; all destinations stay on the platform origin. */
+.home-style-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid var(--style-border);
+  border-radius: 999px;
+  background: var(--style-background);
+  color: var(--style-text);
+  font-family: Arial, "Microsoft YaHei", sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: auto;
+  backdrop-filter: blur(12px);
+}
+.home-style-switch > span { padding: 0 9px; opacity: .7; }
+.home-style-switch > a { padding: 6px 14px; border-radius: 999px; color: inherit; text-decoration: none; }
+.home-style-switch > a:hover { background: var(--style-hover); }
+.home-style-switch > a[aria-current="page"] { background: var(--style-active); color: var(--style-active-text); }
+.home-style-switch > a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.home-style-switch--particle {
+  margin-top: 18px;
+  --style-border: #ffffff30;
+  --style-background: #071219b8;
+  --style-text: #e6f1f4;
+  --style-hover: #ffffff18;
+  --style-active: #b6f4e7;
+  --style-active-text: #07332e;
+}
+.home-style-switch--ocean {
+  margin: 10px 0 0 6.3%;
+  --style-border: #092c4b30;
+  --style-background: #edf5f2c9;
+  --style-text: #092c4b;
+  --style-hover: #092c4b12;
+  --style-active: #092c4b;
+  --style-active-text: #f4faf8;
+}

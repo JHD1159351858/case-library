@@ -8,9 +8,11 @@ import { SIM_INIT, SIM_EVOLVE, FFT_ROWS, FFT_COLS, SIM_MIPS, FOAM_TEX, RGBA8_MIP
 import { TRANS_LUT, MS_LUT, SKYVIEW_LUT, ENV_CUBE, CUBE_MIPS } from './wgsl/sky.js';
 import { OCEAN, SKY_BG, HEIGHT_PROBE } from './wgsl/ocean.js';
 import { BLOOM_DOWN, BLOOM_UP, COMPOSITE } from './wgsl/post.js';
+import { SKY_PHOTO_LINEARIZE } from './wgsl/sky-photo.js';
 
 const DBG = 0;
 const D2R = Math.PI / 180;
+const POST_LOOK = { saturation: 1.05, contrast: 1.06, warmth: -0.19 };
 
 
 // ----------------------------------------------------------------------------------------
@@ -27,7 +29,7 @@ export const P = {
   choppy: 1.25,
   turbidity: 0.75,     // water body brightness (coastal sediment / plankton)
   foam: 1.0,
-  sunElev: 3.0,        // deg
+  sunElev: 5.0,        // aligned with the sun in the extracted sky
   sunAzim: 27,         // aligned with the sun in the reference sky
   exposure: 1.35,
   haze: 1.0,
@@ -135,6 +137,29 @@ export async function createOceanScene(canvas, options = {}) {
     label, layout: pipe.getBindGroupLayout(0),
     entries: entries.map((r, i) => ({ binding: i, resource: r })),
   });
+  const skyResponse = await fetch(new URL('../../assets/sky-reference.png', import.meta.url));
+  if (!skyResponse.ok) fail('Could not load the sky reference image.');
+  const skyBitmap = await createImageBitmap(await skyResponse.blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
+  const skySize = [skyBitmap.width, skyBitmap.height];
+  const skySource = device.createTexture({ label: 'sky photograph source', size: skySize, format: 'rgba8unorm',
+    usage: TU.TEXTURE_BINDING | TU.COPY_DST | TU.RENDER_ATTACHMENT });
+  device.queue.copyExternalImageToTexture({ source: skyBitmap }, { texture: skySource }, skySize);
+  skyBitmap.close();
+  const skyPhotoTexture = device.createTexture({ label: 'sky photograph HDR', size: skySize, format: 'rgba16float',
+    usage: TU.TEXTURE_BINDING | TU.STORAGE_BINDING });
+  const skyPhotoView = skyPhotoTexture.createView();
+  const photoLook = mkBuf(16, GU.UNIFORM | GU.COPY_DST, 'sky photograph calibration');
+  device.queue.writeBuffer(photoLook, 0, new Float32Array([P.exposure, POST_LOOK.saturation, POST_LOOK.contrast, POST_LOOK.warmth]));
+  const photoPipe = await computePipe(SKY_PHOTO_LINEARIZE, 'sky photograph inverse tone map');
+  const photoEncoder = device.createCommandEncoder();
+  const photoPass = photoEncoder.beginComputePass();
+  photoPass.setPipeline(photoPipe);
+  photoPass.setBindGroup(0, bg(photoPipe, [skySource.createView(), skyPhotoView, { buffer: photoLook }], 'sky photograph'));
+  photoPass.dispatchWorkgroups(Math.ceil(skySize[0] / 8), Math.ceil(skySize[1] / 8));
+  photoPass.end();
+  device.queue.submit([photoEncoder.finish()]);
+  skySource.destroy();
+  photoLook.destroy();
   const bgInit = bg(initPipe, [{ buffer: simUBO }, { buffer: h0Buf }], 'init');
   const bgEvolve = bg(evolvePipe, [{ buffer: simUBO }, { buffer: h0Buf }, { buffer: specA }, { buffer: specB }], 'evolve');
   const bgRows = bg(rowsPipe, [{ buffer: specA }, { buffer: specB }, { buffer: tmpA }, { buffer: tmpB }], 'rows');
@@ -224,7 +249,7 @@ export async function createOceanScene(canvas, options = {}) {
   const bgTrans = bg(transPipe, [{ buffer: atmoUBO }, transView], 'trans');
   const bgMS = bg(msPipe, [{ buffer: atmoUBO }, transView, sampClamp, msView], 'ms');
   const bgSkyView = bg(skyViewPipe, [{ buffer: frameUBO }, transView, msView, sampClamp, skyView], 'skyview');
-  const bgEnv = bg(envPipe, [{ buffer: frameUBO }, transView, skyView, sampClamp, lvl(envTex, 0)], 'env');
+  const bgEnv = bg(envPipe, [{ buffer: frameUBO }, transView, skyView, sampClamp, lvl(envTex, 0), skyPhotoView], 'env');
   const bgCubeMips = [];
   for (let m = 1; m < ENV_MIPS; m++) bgCubeMips.push(bg(cubeMipPipe, [lvl(envTex, m - 1), lvl(envTex, m)], 'cubemip' + m));
 
@@ -278,7 +303,7 @@ export async function createOceanScene(canvas, options = {}) {
   const bgOcean = [0, 1].map((i) => bg(oceanPipe, [{ buffer: frameUBO }, transView, skyView, sampClamp,
     fullArr(dispTex), fullArr(derivTex), fullArr(momTex), foamTex.createView(), envCubeView, sampRepeat,
     fullArr(foamW[i])], 'ocean' + i));
-  const bgSky = bg(skyPipe, [{ buffer: frameUBO }, transView, skyView, sampClamp], 'atmosphere and water volume');
+  const bgSky = bg(skyPipe, [{ buffer: frameUBO }, transView, skyView, sampClamp, skyPhotoView], 'atmosphere and water volume');
 
   // Water height under the camera (async readback) determines which side of the
   // moving surface the scroll camera occupies.
@@ -296,8 +321,8 @@ export async function createOceanScene(canvas, options = {}) {
   const onProbeFail = () => { probePending = false; };
 
   // CDLOD grid mesh
-  const GRID = canvas.clientWidth < 700 ? 16 : 32;
-  const LEAF = 2.0;           // finest node size (m) -> 6.25 cm vertex spacing
+  const GRID = 64;
+  const LEAF = 2.0;           // finest node size (m) -> 3.125 cm desktop vertex spacing
   const R0 = 8 * LEAF;        // LOD 0 range
   const LODS = 17;
   const MAX_DIST = 160000;
@@ -440,12 +465,10 @@ export async function createOceanScene(canvas, options = {}) {
     const tilt = smooth(0.12, 0.50, progress);
     cam.x = pointerX * 0.07;
     cam.z = -progress * 3.5;
-    // Follow the passing swell near entry and spend more scroll distance at the
-    // interface. The view tilts upward before submerging, keeping the sky window visible.
-    const ride = waterH * smooth(0.08, 0.26, progress) * (1 - smooth(0.66, 1, progress));
-    cam.y = ride + 2.4 - 2.08 * smooth(0.06, 0.28, progress)
-      - 0.64 * smooth(0.28, 0.66, progress) - 6.68 * smooth(0.66, 1, progress)
-      + Math.sin(time * 0.48) * 0.10 * (1-dive);
+    // Follow the local swell on approach, then continue through it without
+    // lingering against the lens. Look upward before crossing the interface.
+    const ride = waterH * smooth(0.08, 0.30, progress) * (1 - smooth(0.45, 0.80, progress));
+    cam.y = ride + 2.4 - dive * 9.4 + Math.sin(time * 0.48) * 0.10 * (1-dive);
     cam.yaw = pointerX * 0.012;
     cam.pitch = (9.5 + tilt * 19.5) * D2R + pointerY * 0.004;
   }
@@ -526,7 +549,7 @@ export async function createOceanScene(canvas, options = {}) {
   function writeFrame(time) {
     const aspect = W / H;
     const tanY = Math.tan(cam.fovY * 0.5), tanX = tanY * aspect;
-    const near = 0.25;
+    const near = 0.08;
     proj.fill(0);
     proj[0] = 1 / tanX; proj[5] = 1 / tanY; proj[11] = -1; proj[14] = near;
     const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
@@ -707,7 +730,7 @@ export async function createOceanScene(canvas, options = {}) {
     }
 
     compData[0] = P.exposure; compData[1] = P.bloom; compData[2] = frameIndex % 64; compData[3] = 0.10;
-    compData[4] = 1.05; compData[5] = 1.06; compData[6] = -0.19; compData[7] = 0;
+    compData[4] = POST_LOOK.saturation; compData[5] = POST_LOOK.contrast; compData[6] = POST_LOOK.warmth; compData[7] = 0;
     device.queue.writeBuffer(compUBO, 0, compData);
     const swapTex = ctx.getCurrentTexture();
     compPass.colorAttachments[0].view = swapTex.createView();
@@ -738,7 +761,15 @@ export async function createOceanScene(canvas, options = {}) {
   }
 
   resize();
+  device.pushErrorScope('validation');
   render();
+  await device.queue.onSubmittedWorkDone();
+  const firstFrameError = await device.popErrorScope();
+  if (firstFrameError) {
+    device.destroy();
+    fail('Could not render the first ocean frame.');
+  }
+  canvas.dataset.firstFrame = 'ready';
   options.onReady?.();
   return {
     kind: 'webgpu-fft', render, resize,

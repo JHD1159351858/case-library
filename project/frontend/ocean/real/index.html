@@ -1,65 +1,88 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN" class="scene-loading">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#8cb5ce">
-  <meta name="description" content="A moment of stillness. An endless sense of possibility. Scroll from the ocean surface into the blue.">
-  <title>OCEAN — A living sea.</title>
-  <link rel="icon" href="../assets/ocean.svg" type="image/svg+xml">
+  <meta name="description" content="发现多学科智能体教学案例，按名称、学科、学校或课程检索，了解应用场景与使用方法，找到适合你的智能体。">
+  <title>智能体案例平台 — 超星辽宁</title>
+  <link rel="icon" href="../../favicon.svg" type="image/svg+xml">
   <link rel="preload" href="../assets/fonts/bodoni-moda.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="stylesheet" href="../ocean.css">
-  <link rel="stylesheet" href="./real.css">
-  <script type="module" src="../ocean.js"></script>
+  <link rel="stylesheet" href="./real.css?v=scene-loader">
+  <link rel="stylesheet" href="../../home-style.css">
+  <script type="module" src="../ocean.js?v=scene-loader"></script>
 </head>
 <body>
-  <main class="ocean-experience" aria-label="An ocean journey">
+  <section class="scene-loader" id="scene-loader" aria-label="页面加载" aria-busy="true">
+    <div class="loader-content">
+      <p class="loader-brand">智能体案例平台</p>
+      <div class="loader-ocean" aria-hidden="true">
+        <span class="loader-ripple"></span><span class="loader-ripple"></span>
+        <svg viewBox="0 0 120 60"><path d="M8 24C25 24 26 10 43 10S62 35 80 35s20-13 32-13"/><path d="M8 38C25 38 26 24 43 24S62 49 80 49s20-13 32-13"/></svg>
+      </div>
+      <h2 id="loader-title">正在唤醒海洋</h2>
+      <p class="loader-message" id="loader-message" role="status">海浪就绪，即刻启程</p>
+      <div class="loader-track" aria-hidden="true"><span></span></div>
+      <div class="loader-actions" id="loader-actions" hidden>
+        <button class="primary-button" id="retry-scene" type="button">重新加载</button>
+        <a href="/agents.html">直接进入案例库 <span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+  </section>
+  <main class="ocean-experience" aria-label="智能体案例平台首页" aria-busy="true" inert>
     <div class="ocean-stage" id="ocean-stage">
       <div class="ocean-background" aria-hidden="true">
         <canvas id="ocean-canvas" data-scene="fft"></canvas>
       </div>
 
-      <p class="scene-status" id="scene-status" role="status">Preparing the ocean…</p>
+      <p class="scene-status" id="scene-status" role="status">正在加载海洋场景…</p>
       <div class="page-overlay" id="page-overlay">
-        <button class="announcement" type="button" data-depth="0.92">
-          A new perspective begins here. <span aria-hidden="true">→</span>
-        </button>
+        <a class="announcement" href="/agents.html">
+          从一个案例，发现教学的更多可能 <span aria-hidden="true">→</span>
+        </a>
 
         <header class="site-header">
-          <a class="brand" href="#surface" aria-label="OCEAN — return to the surface" data-depth="0">
+          <a class="brand" href="#surface" aria-label="智能体案例平台 — 返回首页顶部" data-depth="0">
             <svg viewBox="0 0 84 28" aria-hidden="true"><path d="M1 19C16 20 23 3 38 7c14 4 20 21 44 8C62 28 52 19 39 15 25 11 17 23 1 19Z"/><path d="M21 10C36-4 48 1 64 10 44 5 37 4 21 10Z"/></svg>
-            <span>OCEAN</span>
+            <span>智能体案例平台</span>
           </a>
-          <nav class="desktop-nav" aria-label="Main navigation">
-            <button type="button" data-depth="0.84">Discover</button>
-            <button type="button" data-panel="story">Our story</button>
-            <button type="button" data-panel="journal">Journal</button>
+          <nav class="desktop-nav" aria-label="主导航">
+            <a href="/agents.html">案例库</a>
+            <button type="button" data-panel="journal">使用指南</button>
+            <button type="button" data-panel="story">关于平台</button>
           </nav>
-          <button class="outline-button header-explore" type="button" data-depth="1">Explore now <span aria-hidden="true">↗</span></button>
-          <button class="menu-button" type="button" aria-label="Open navigation" aria-controls="mobile-navigation" aria-expanded="false"><span></span><span></span></button>
-          <nav class="mobile-nav" id="mobile-navigation" aria-label="Mobile navigation" hidden>
-            <button type="button" data-depth="0.84">Discover <span aria-hidden="true">↘</span></button>
-            <button type="button" data-panel="story">Our story <span aria-hidden="true">↗</span></button>
-            <button type="button" data-panel="journal">Journal <span aria-hidden="true">↗</span></button>
+          <a class="outline-button header-explore" href="/agents.html">进入案例库 <span aria-hidden="true">↗</span></a>
+          <button class="menu-button" type="button" aria-label="打开导航" aria-controls="mobile-navigation" aria-expanded="false"><span></span><span></span></button>
+          <nav class="mobile-nav" id="mobile-navigation" aria-label="移动端导航" hidden>
+            <a href="/agents.html">案例库 <span aria-hidden="true">↗</span></a>
+            <button type="button" data-panel="journal">使用指南 <span aria-hidden="true">↗</span></button>
+            <button type="button" data-panel="story">关于平台 <span aria-hidden="true">↗</span></button>
           </nav>
         </header>
 
+        <nav class="home-style-switch home-style-switch--ocean" aria-label="首页风格">
+          <span>首页风格</span>
+          <a href="/">粒子</a>
+          <a href="/ocean/real/" aria-current="page">海洋</a>
+        </nav>
+
         <section class="hero-copy" aria-labelledby="hero-title">
-          <p class="eyebrow">Feel the world slow down</p>
-          <h1 id="hero-title">Closer to<br>the ocean.</h1>
-          <p class="hero-description">A moment of stillness.<br>An endless sense of possibility.</p>
+          <p class="eyebrow">超星辽宁 · 让教学灵感走向实践</p>
+          <h1 id="hero-title">发现智能体<br>看见新可能</h1>
+          <p class="hero-description">汇集多学科教学案例，连接课程与应用。<br>按需检索，找到适合你的智能体。</p>
           <div class="hero-actions">
-            <button class="primary-button" type="button" data-depth="1">Explore the ocean <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg></button>
-            <button class="film-button" id="watch-film" type="button"><span class="play-circle"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 9 6-9 6Z"/></svg></span><span>Watch the film</span></button>
+            <a class="primary-button" href="/agents.html">探索智能体案例 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6"/></svg></a>
+            <button class="film-button" id="watch-film" type="button"><span class="play-circle"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 9 6-9 6Z"/></svg></span><span>沉浸探索</span></button>
           </div>
         </section>
 
         <footer class="scene-footer">
-          <button class="motion-button" id="toggle-motion" type="button" aria-label="Pause ocean animation" aria-pressed="false">
+          <button class="motion-button" id="toggle-motion" type="button" aria-label="暂停海洋动画" aria-pressed="false">
             <span class="motion-circle"><svg class="pause-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5v10M13 5v10"/></svg><svg class="resume-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 9 6-9 6Z"/></svg></span>
-            <span id="motion-label">Live at sea</span>
+            <span id="motion-label">海洋律动</span>
           </button>
-          <button class="scroll-button" id="scroll-cue" type="button" data-depth="1"><span id="scroll-label">Scroll to explore</span><svg viewBox="0 0 20 24" aria-hidden="true"><path d="M10 2v19M4 14l6 7 6-7M7 11l3 3 3-3"/></svg></button>
+          <button class="scroll-button" id="scroll-cue" type="button" data-depth="1"><span id="scroll-label">向下滚动 · 沉浸探索</span><svg viewBox="0 0 20 24" aria-hidden="true"><path d="M10 2v19M4 14l6 7 6-7M7 11l3 3 3-3"/></svg></button>
         </footer>
       </div>
     </div>
@@ -67,19 +90,19 @@
   </main>
 
   <dialog class="reference-dialog" id="reference-dialog" aria-labelledby="panel-title">
-    <button class="dialog-close" type="button" data-close-dialog aria-label="Close panel">×</button>
-    <p class="eyebrow">OCEAN</p>
-    <h2 id="panel-title">Our story</h2>
+    <button class="dialog-close" type="button" data-close-dialog aria-label="关闭面板">×</button>
+    <p class="eyebrow">智能体案例平台</p>
+    <h2 id="panel-title">关于平台</h2>
     <p id="panel-copy"></p>
-    <button class="primary-button" type="button" data-close-dialog>Back to the ocean <span aria-hidden="true">↗</span></button>
+    <button class="primary-button" type="button" data-close-dialog>返回首页 <span aria-hidden="true">↗</span></button>
   </dialog>
 
-  <dialog class="film-dialog" id="film-dialog" aria-label="An ocean journey, rendered in the browser">
-    <button class="film-close" type="button" aria-label="Close film">Close <span aria-hidden="true">×</span></button>
-    <div class="film-caption"><p class="eyebrow">A moment of stillness</p><h2>Just you.<br>And the blue.</h2><p class="film-note">An ocean study · Scroll to take control</p></div>
-    <div class="film-bottom"><button class="film-pause" type="button" aria-label="Pause cinematic journey">Pause journey <span aria-hidden="true">Ⅱ</span></button><span class="film-time" aria-hidden="true">00:00 / 00:20</span></div>
+  <dialog class="film-dialog" id="film-dialog" aria-label="海洋场景沉浸探索">
+    <button class="film-close" type="button" aria-label="关闭沉浸探索">返回首页 <span aria-hidden="true">×</span></button>
+    <div class="film-caption"><p class="eyebrow">从灵感出发，向实践深入</p><h2>让好想法<br>走进课堂。</h2><p class="film-note">海洋沉浸体验 · 滚动可返回首页</p></div>
+    <div class="film-bottom"><button class="film-pause" type="button" aria-label="暂停沉浸探索">暂停探索 <span aria-hidden="true">Ⅱ</span></button><span class="film-time" aria-hidden="true">00:00 / 00:20</span></div>
     <div class="film-progress" aria-hidden="true"><span></span></div>
   </dialog>
-  <noscript><p class="noscript-message">Enable JavaScript to explore below the surface.</p></noscript>
+  <noscript><style>.scene-loader{display:none}</style><p class="noscript-message">请启用 JavaScript 体验海洋动效，或<a href="/agents.html">直接进入案例库</a>。</p></noscript>
 </body>
 </html>

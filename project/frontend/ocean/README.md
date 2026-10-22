@@ -2,7 +2,7 @@
 
 Independent recreation of the two supplied website screenshots, with an animated ocean and a reversible, scroll-driven descent.
 
-A separate WebGPU FFT version is available at `/ocean/real/`, generating its sky, clouds, waves and underwater lighting entirely in code, without background images. See [its README](real/README.md) for rendering details and browser requirements. The original photo-based version remains at `/ocean/`.
+A separate WebGPU FFT version is available at `/ocean/real/`, combining a reference-derived sky-only image with code-generated waves and underwater lighting. See [its README](real/README.md) for rendering details and browser requirements. The original photo-based version remains at `/ocean/`.
 
 ## Run locally
 

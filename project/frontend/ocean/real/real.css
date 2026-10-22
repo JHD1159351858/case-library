@@ -5,3 +5,40 @@
 .is-submerged .menu-button span{background:currentColor}
 .is-submerged .mobile-nav{color:#061b3d}
 .hero-copy,.site-header{transition:color .6s}
+.brand>span{letter-spacing:.1em;white-space:nowrap}
+.brand svg{width:42px}
+.desktop-nav a{font-size:14px;white-space:nowrap;padding:8px 0}
+.desktop-nav a:hover{text-decoration:underline;text-underline-offset:6px}
+.mobile-nav a{display:flex;justify-content:space-between;padding:14px 0;font-size:15px}
+.mobile-nav a+button{border-top:1px solid #0c2d4615}
+h1,.film-caption h2,.reference-dialog h2{font-family:"Songti SC","SimSun",serif;letter-spacing:.02em;line-height:1.2}
+h1{font-size:clamp(42px,8.8vw,104px);margin-bottom:24px}
+.hero-description{font-size:clamp(15px,1.4vw,22px);line-height:1.8;letter-spacing:.03em}
+.eyebrow{letter-spacing:.2em}
+.film-caption h2{font-size:clamp(42px,8.8vw,104px)}
+.reference-dialog h2{font-size:36px}
+@media(min-width:601px) and (max-width:1000px){.desktop-nav{position:static;transform:none;gap:18px}.brand{gap:8px}.brand>span{font-size:13px;letter-spacing:.03em}.header-explore{padding:0 14px;font-size:12px}}
+
+.scene-loading{overflow:hidden}
+.scene-loader{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 42%,#123d54 0%,#071f33 48%,#041423 100%);color:#e9f0ee;text-align:center;opacity:1;visibility:visible;transition:opacity .7s ease,visibility 0s .7s}
+html:not(.scene-loading) .scene-loader{opacity:0;visibility:hidden;pointer-events:none}
+.loader-content{width:min(88vw,420px);padding:30px 0}
+.loader-brand{margin:0 0 42px;font-size:12px;letter-spacing:.3em;color:#afc8d1}
+.loader-ocean{position:relative;display:grid;place-items:center;width:136px;height:136px;margin:0 auto 30px}
+.loader-ocean svg{width:100px;fill:none;stroke:#c4e3e5;stroke-width:1.2;stroke-linecap:round;stroke-dasharray:150;animation:loader-wave 2.6s ease-in-out infinite}
+.loader-ocean path+path{opacity:.45}
+.loader-ripple{position:absolute;inset:0;border:1px solid #b2d5de33;border-radius:50%;animation:loader-ripple 3.2s ease-out infinite}
+.loader-ripple:nth-child(2){animation-delay:-1.6s}
+.scene-loader h2{margin:0 0 16px;font-family:"Songti SC","SimSun",serif;font-weight:400;font-size:30px;letter-spacing:.12em}
+.loader-message{margin:0;font-size:12px;line-height:1.8;letter-spacing:.12em;color:#a8c4ce}
+.loader-track{width:100px;height:1px;margin:30px auto 0;background:#b2d5de26;overflow:hidden}
+.loader-track span{display:block;width:45%;height:100%;background:#d6e7dc;animation:loader-drift 1.8s ease-in-out infinite}
+.loader-actions{display:flex;justify-content:center;align-items:center;gap:22px;margin-top:30px;font-size:12px}
+.loader-actions .primary-button{background:#214d63;border-color:#a8c4ce55}
+.scene-loader.has-error .loader-track{display:none}
+.scene-loader.has-error .loader-ocean *{animation:none}
+.scene-ready #ocean-canvas{transition:none}
+@keyframes loader-wave{0%,100%{stroke-dashoffset:150;opacity:.5;transform:translateY(3px)}50%{stroke-dashoffset:0;opacity:1;transform:translateY(-3px)}}
+@keyframes loader-ripple{0%{transform:scale(.58);opacity:0}25%{opacity:.7}100%{transform:scale(1.25);opacity:0}}
+@keyframes loader-drift{0%{transform:translateX(-110%)}100%{transform:translateX(330%)}}
+@media(prefers-reduced-motion:reduce){.scene-loader,.loader-ocean *,.loader-track span{animation:none;transition:none}.loader-ocean svg{stroke-dashoffset:0}}

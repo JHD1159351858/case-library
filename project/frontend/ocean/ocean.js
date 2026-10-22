@@ -1,6 +1,9 @@
 const root = document.documentElement;
+const label = (english, chinese) => root.lang === 'zh-CN' ? chinese : english;
 const stage = document.querySelector('#ocean-stage');
 const canvas = document.querySelector('#ocean-canvas');
+const loader = document.querySelector('#scene-loader');
+const experience = document.querySelector('.ocean-experience');
 const pauseButton = document.querySelector('#toggle-motion');
 const motionLabel = document.querySelector('#motion-label');
 const scrollCue = document.querySelector('#scroll-cue');
@@ -27,13 +30,27 @@ let filmPaused = false;
 let savedProgress = 0;
 let savedPaused = false;
 
+function showLoadingError() {
+  if (!loader) return;
+  root.classList.add('scene-loading');
+  loader.classList.add('has-error');
+  loader.removeAttribute('aria-hidden');
+  loader.setAttribute('aria-busy', 'false');
+  experience.inert = true;
+  experience.setAttribute('aria-busy', 'false');
+  document.querySelector('#loader-title').textContent = '海洋暂时未能呈现';
+  document.querySelector('#loader-message').textContent = '请重新加载，或直接进入案例库';
+  document.querySelector('#loader-actions').hidden = false;
+}
+document.querySelector('#retry-scene')?.addEventListener('click', () => location.reload());
+
 function scrollRange() {
   return Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
 }
 
 function closeMenu() {
   menuButton.setAttribute('aria-expanded', 'false');
-  menuButton.setAttribute('aria-label', 'Open navigation');
+  menuButton.setAttribute('aria-label', label('Open navigation', '打开导航'));
   mobileNavigation.hidden = true;
 }
 
@@ -44,8 +61,8 @@ function goToDepth(depth) {
 
 function updatePause() {
   pauseButton.setAttribute('aria-pressed', String(paused));
-  pauseButton.setAttribute('aria-label', paused ? 'Resume ocean animation' : 'Pause ocean animation');
-  motionLabel.textContent = paused ? 'A moment of stillness' : 'Live at sea';
+  pauseButton.setAttribute('aria-label', paused ? label('Resume ocean animation', '继续海洋动画') : label('Pause ocean animation', '暂停海洋动画'));
+  motionLabel.textContent = paused ? label('A moment of stillness', '动画已暂停') : label('Live at sea', '海洋律动');
 }
 
 function updateScrollState() {
@@ -81,7 +98,7 @@ function render(timestamp) {
   const submerged = renderer?.submerged ?? (progress > 0.62);
   stage.classList.toggle('is-submerged', submerged);
   scrollCue.dataset.depth = submerged ? '0' : '1';
-  scrollLabel.textContent = submerged ? 'Scroll to resurface' : 'Scroll to explore';
+  scrollLabel.textContent = submerged ? label('Scroll to resurface', '向上滚动 · 返回海面') : label('Scroll to explore', '向下滚动 · 沉浸探索');
 
   // A 30 fps cap keeps the continuous background light on laptops and phones.
   if (renderer && (timestamp - lastDraw >= 1000 / 30 || paused)) {
@@ -112,7 +129,7 @@ pauseButton.addEventListener('click', () => {
 menuButton.addEventListener('click', () => {
   const isOpen = menuButton.getAttribute('aria-expanded') === 'true';
   menuButton.setAttribute('aria-expanded', String(!isOpen));
-  menuButton.setAttribute('aria-label', isOpen ? 'Open navigation' : 'Close navigation');
+  menuButton.setAttribute('aria-label', isOpen ? label('Open navigation', '打开导航') : label('Close navigation', '关闭导航'));
   mobileNavigation.hidden = isOpen;
 });
 
@@ -120,10 +137,10 @@ document.querySelectorAll('[data-panel]').forEach(button => {
   button.addEventListener('click', () => {
     closeMenu();
     const story = button.dataset.panel === 'story';
-    document.querySelector('#panel-title').textContent = story ? 'Our story' : 'Journal';
+    document.querySelector('#panel-title').textContent = story ? label('Our story', '关于平台') : label('Journal', '使用指南');
     document.querySelector('#panel-copy').textContent = story
-      ? 'This preview recreates the ocean experience in the supplied images. The original story page was not included in the reference.'
-      : 'The reference includes this navigation label, but no journal articles were supplied. Return to the ocean to continue exploring.';
+      ? label('This preview recreates the ocean experience in the supplied images. The original story page was not included in the reference.', '智能体案例平台汇集不同学科与课程的智能体应用案例，帮助教师从教学问题出发，了解案例的应用场景、课程信息与使用方法，为教学实践寻找可参考的思路。')
+      : label('The reference includes this navigation label, but no journal articles were supplied. Return to the ocean to continue exploring.', '进入案例库后，可输入名称、学科、课程或教学痛点检索，也可按学科与学校筛选。点击案例查看详细信息与使用说明，通过案例中提供的链接访问智能体。需要进一步查找时，可使用“对话找智能体”描述你的需求。');
     panel.showModal();
   });
 });
@@ -135,8 +152,8 @@ panel.addEventListener('click', event => {
 
 function setFilmPaused(value) {
   filmPaused = value;
-  filmPause.setAttribute('aria-label', value ? 'Play cinematic journey' : 'Pause cinematic journey');
-  filmPause.innerHTML = value ? 'Play journey <span aria-hidden="true">▷</span>' : 'Pause journey <span aria-hidden="true">Ⅱ</span>';
+  filmPause.setAttribute('aria-label', value ? label('Play cinematic journey', '继续沉浸探索') : label('Pause cinematic journey', '暂停沉浸探索'));
+  filmPause.innerHTML = value ? `${label('Play journey', '继续探索')} <span aria-hidden="true">▷</span>` : `${label('Pause journey', '暂停探索')} <span aria-hidden="true">Ⅱ</span>`;
 }
 
 document.querySelector('#watch-film').addEventListener('click', () => {
@@ -210,7 +227,7 @@ canvas.addEventListener('webglcontextlost', event => {
 updatePause();
 updateScrollState();
 try {
-  const modulePath = canvas.dataset.scene === 'fft' ? './real/vendor/main.js' : './ocean-scene.js';
+  const modulePath = canvas.dataset.scene === 'fft' ? './real/vendor/main.js?v=first-frame' : './ocean-scene.js';
   const { createOceanScene } = await import(modulePath);
   renderer = await createOceanScene(canvas, {
     onError(error) {
@@ -222,6 +239,7 @@ try {
       updatePause();
       renderer?.dispose();
       renderer = undefined;
+      showLoadingError();
     },
   });
   stage.classList.add('scene-ready');
@@ -229,10 +247,23 @@ try {
   const status = document.querySelector('#scene-status');
   if (status) status.hidden = true;
   requestFrame();
+  if (loader) {
+    // The renderer has completed its first GPU frame. Let the visible canvas
+    // reach a paint before removing the opaque entrance screen.
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    if (stage.classList.contains('scene-ready')) {
+      experience.inert = false;
+      experience.setAttribute('aria-busy', 'false');
+      loader.setAttribute('aria-busy', 'false');
+      loader.setAttribute('aria-hidden', 'true');
+      root.classList.remove('scene-loading');
+    }
+  }
 } catch (error) {
   stage.dataset.renderer = canvas.dataset.scene === 'fft' ? 'unavailable' : 'photographic-fallback';
   const status = document.querySelector('#scene-status');
-  if (status) status.textContent = `This ocean preview could not start. ${error.message} Try a recent Chrome or Edge with graphics acceleration enabled.`;
+  if (status) status.textContent = label(`This ocean preview could not start. ${error.message} Try a recent Chrome or Edge with graphics acceleration enabled.`, '海洋场景暂时无法加载，请尝试开启浏览器图形加速。你仍可直接进入案例库。');
+  showLoadingError();
   console.warn('Ocean animation could not start.', error.message);
 }
 window.addEventListener('pagehide', event => {

@@ -8,6 +8,7 @@
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="site-ui.css" />
+  <link rel="stylesheet" href="home-style.css" />
 </head>
 <body>
   <!-- 外层：750vh 滚动壳，为 WebGL 时间轴提供滚动行程 -->
@@ -26,7 +27,14 @@
       <!-- DOM 覆盖层：顶部品牌/导航 + 四组相位文案 -->
       <div id="overlay" class="hero-overlay">
         <div class="overlay-top">
-          <div class="brand">ChaoXing LiaoNing</div>
+          <div>
+            <div class="brand">ChaoXing LiaoNing</div>
+            <nav class="home-style-switch home-style-switch--particle" aria-label="首页风格">
+              <span>首页风格</span>
+              <a href="/" aria-current="page">粒子</a>
+              <a href="/ocean/real/">海洋</a>
+            </nav>
+          </div>
           <nav class="main-nav" aria-label="Primary">
             <div class="nav-item"><span class="nav-label">Cases</span><span class="nav-bullet" aria-hidden="true">&bull;</span></div>
             <div class="nav-item"><span class="nav-label">Disciplines</span><span class="nav-bullet" aria-hidden="true">&bull;</span></div>

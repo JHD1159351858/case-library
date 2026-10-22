@@ -1,5 +1,6 @@
 // Physically based atmosphere (Hillaire 2020 style LUTs) + procedural cloud deck.
 import { FRAME_WGSL, ATMO_CORE_WGSL, NOISE_WGSL, SKY_W, SKY_H, ENV_SIZE } from './common.js';
+import { SKY_PHOTO_PROJECTION } from './sky-photo.js';
 
 const ATMO_UNIFORM = /* wgsl */ `
 struct AtmoP { haze: vec4f };   // x = mie multiplier
@@ -403,7 +404,7 @@ fn sunDisk(dir: vec3f) -> vec3f {
   return rad * limb * edge * sampleTrans(camR(), max(dir.y, -0.01));
 }
 
-fn skyRadiance(dirIn: vec3f, withSun: bool, pixAng: f32) -> vec3f {
+fn proceduralSkyRadiance(dirIn: vec3f, withSun: bool, pixAng: f32) -> vec3f {
   var dir = dirIn;
   dir.y = max(dir.y, 0.0005);
   dir = normalize(dir);
@@ -416,13 +417,22 @@ fn skyRadiance(dirIn: vec3f, withSun: bool, pixAng: f32) -> vec3f {
 }
 `;
 
+export const SKY_PHOTO_FUNCS = SKY_PHOTO_PROJECTION + /* wgsl */ `
+fn skyRadiance(direction: vec3f, withSun: bool, pixAng: f32) -> vec3f {
+  let photo = photographSky(direction);
+  if (photo.a >= 0.9999) { return photo.rgb; }
+  return mix(proceduralSkyRadiance(direction, withSun, pixAng), photo.rgb, photo.a);
+}
+`;
+
 export const ENV_CUBE = FRAME_WGSL + ATMO_CORE_WGSL + /* wgsl */ `
 @group(0) @binding(0) var<uniform> F: Frame;
 @group(0) @binding(1) var transLUT: texture_2d<f32>;
 @group(0) @binding(2) var skyLUT: texture_2d<f32>;
 @group(0) @binding(3) var sampC: sampler;
 @group(0) @binding(4) var dst: texture_storage_2d_array<rgba16float, write>;
-` + SKY_RENDER_FUNCS + SKY_CLOUD_FUNCS + /* wgsl */ `
+@group(0) @binding(5) var skyPhoto: texture_2d<f32>;
+` + SKY_RENDER_FUNCS + SKY_CLOUD_FUNCS + SKY_PHOTO_FUNCS + /* wgsl */ `
 const ENV: f32 = ${ENV_SIZE}.0;
 fn faceDir(face: u32, uv: vec2f) -> vec3f {
   let u = uv.x * 2.0 - 1.0;

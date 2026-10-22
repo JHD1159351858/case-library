@@ -1,6 +1,6 @@
 // Ocean surface + sky background rendering.
 import { FRAME_WGSL, ATMO_CORE_WGSL, ENV_MIPS, ENV_SIZE, N, CASCADES } from './common.js';
-import { SKY_RENDER_FUNCS, SKY_CLOUD_FUNCS } from './sky.js';
+import { SKY_RENDER_FUNCS, SKY_CLOUD_FUNCS, SKY_PHOTO_FUNCS } from './sky.js';
 
 const RENDER_BINDINGS = /* wgsl */ `
 @group(0) @binding(0) var<uniform> F: Frame;
@@ -17,7 +17,7 @@ const WATER_EXT: vec3f = vec3f(0.19, 0.085, 0.055);
 // Classify rays at the near view plane, not the entire frame at once. The
 // sampled FFT tangent lets the last sliver of sky follow the passing wave.
 fn lensImmersion(direction: vec3f) -> f32 {
-  let offset = direction * (0.25 / max(dot(direction, F.camFwd.xyz), 0.2));
+  let offset = direction * (0.08 / max(dot(direction, F.camFwd.xyz), 0.2));
   let waterAtLens = F.camFwd.w + dot(F.windP[1].xy, offset.xz) - offset.y;
   return smoothstep(-0.035, 0.035, waterAtLens);
 }
@@ -76,8 +76,9 @@ fn interfaceFresnel(cosine: f32, eta: f32) -> f32 {
 `;
 
 // One radiometric pipeline for the atmosphere, water surface and water volume.
-export const SKY_BG = FRAME_WGSL + ATMO_CORE_WGSL + RENDER_BINDINGS
-    + SKY_RENDER_FUNCS + SKY_CLOUD_FUNCS + UNDERWATER_WGSL + /* wgsl */ `
+export const SKY_BG = FRAME_WGSL + ATMO_CORE_WGSL + RENDER_BINDINGS + /* wgsl */ `
+@group(0) @binding(4) var skyPhoto: texture_2d<f32>;
+` + SKY_RENDER_FUNCS + SKY_CLOUD_FUNCS + SKY_PHOTO_FUNCS + UNDERWATER_WGSL + /* wgsl */ `
 struct VO { @builtin(position) pos: vec4f, @location(0) ndc: vec2f };
 @vertex fn vs(@builtin(vertex_index) i: u32) -> VO {
   let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u)) * 2.0 - 1.0;
@@ -170,7 +171,7 @@ fn foamPattern(xz: vec2f, t: f32) -> f32 {
   return a * 0.78 + b * 0.22;
 }
 
-@fragment fn fs(in: VSOut, @builtin(front_facing) frontFacing: bool) -> @location(0) vec4f {
+@fragment fn fs(in: VSOut) -> @location(0) vec4f {
   let xz = in.xz;
   var s = vec2f(0.0);
   var underwaterSlope = vec2f(0.0);
@@ -311,9 +312,12 @@ fn foamPattern(xz: vec2f, t: f32) -> f32 {
   // grazing sun is largely self-shadowed by the foam's lumpy micro-structure
   let foamLit = foamAlb * (sunE * max(dot(nrm, Ld), 0.0) * 0.318 * 0.5 + foamAmbN * 1.55);
 
-  // The underside is the very same displaced mesh, not a second background.
+  // The ray's medium selects the interface optics. Triangle winding can flip
+  // in a choppy crest and must not switch individual facets to the air material.
   // All implicit texture reads and derivatives above remain in uniform control flow.
-  if (!frontFacing) {
+  let immersion = lensImmersion(-V);
+  var underwaterColour = vec3f(0.0);
+  if (immersion > 0.0) {
     let incident = -V;
     let facingNormal = -normalize(vec3f(-underwaterSlope.x / jx, 1.0, -underwaterSlope.y / jz));
     let cosIncident = max(dot(V, facingNormal), 0.0);
@@ -333,15 +337,19 @@ fn foamPattern(xz: vec2f, t: f32) -> f32 {
     let refraction = mix(skyLight, dot(skyLight, vec3f(0.2126, 0.7152, 0.0722)) * vec3f(0.55, 0.88, 1.3), 0.5);
     let sunLobe = exp((dot(airRay, Ld) - 1.0) / max(0.001, unres * 0.5));
     let reflected = reflect(incident, facingNormal);
-    let reflection = waterAmbient(vec3f(reflected.x, abs(reflected.y), reflected.z), 0.0);
+    // Diffuse light arriving from the surrounding water keeps the underside of
+    // a nearby crest blue even when direct sky transmission is fully reflected.
+    let crestLight = 0.55 + 0.9 * pow(max(dot(-facingNormal,
+        normalize(vec3f(-Ld.x, 0.7, -Ld.z))), 0.0), 2.0);
+    let reflection = waterAmbient(vec3f(reflected.x, max(abs(reflected.y), 0.65), reflected.z), 0.0) * crestLight;
     let underSun = mix(sunE, vec3f(max(sunE.r, max(sunE.g, sunE.b))), 0.75);
     var underside = mix(refraction + underSun * sunLobe * 12.0, reflection, reflectance);
     // Whitecaps transmit diffuse light and soften the underside of breaking crests.
     underside = mix(underside, skyHemi * vec3f(0.12, 0.48, 0.65), foamMask * 0.65);
-    let wetPath = dist * lensImmersion(incident);
+    let wetPath = dist * immersion;
     let absorption = exp(-WATER_EXT * wetPath);
     underside = underside * absorption + waterInscatter(incident, wetPath);
-    return vec4f(underside, 1.0);
+    underwaterColour = underside;
   }
 
   if (F.post.w > 0.5) {
@@ -363,7 +371,7 @@ fn foamPattern(xz: vec2f, t: f32) -> f32 {
   let hz = normalize(vec3f(-V.x, 0.002, -V.z));
   let fogCol = textureSampleLevel(envCube, sampC, hz, 1.0).rgb;
   col = col * T + fogCol * (1.0 - T);
-  return vec4f(col, 1.0);
+  return vec4f(mix(col, underwaterColour, immersion), 1.0);
 }
 `;
 
