@@ -27,13 +27,14 @@
  * 运行：node --test "utils/tests/*.test.mjs"
  */
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { startPreviewServer } from '../../project/backend/server.mjs';
+import { createRequestHandler, startPreviewServer } from '../../project/backend/server.mjs';
+import { createDatabase } from '../../project/backend/database.mjs';
 import { CARD_EFFECT_FIELDS, DEFAULT_CARD_EFFECT_SETTINGS } from '../../project/frontend/js/card-effect-settings.js';
 
 const ADMIN_ROLES = 'admin,ops';
@@ -601,6 +602,88 @@ test('上传：GIF 内含近似边界时回读字节完整且 MIME 正确', asyn
   });
 });
 
+test('上传持久化：不同实例和全新上传目录仍可匿名读取同一图片', async () => {
+  await withEnvironment(async ({ base, center, site }) => {
+    const { cookie } = await login({ base, center }, 'admin');
+    const uploaded = await upload(base, cookie, multipartBody({ boundary: UPLOAD_BOUNDARY }));
+    assert.equal(uploaded.status, 201, uploaded.text);
+    const secondDb = createDatabase({ databasePath: site.config.dbPath });
+    const secondServer = createServer(createRequestHandler({
+      db: secondDb,
+      config: { ...site.config, uploadsDir: join(site.config.uploadsDir, 'other-instance') },
+      logger: SILENT_LOGGER
+    }));
+    try {
+      await new Promise((resolve) => secondServer.listen(0, '127.0.0.1', resolve));
+      const secondBase = `http://127.0.0.1:${secondServer.address().port}`;
+      const fetched = await request(`${secondBase}${uploaded.body.url}`);
+      assert.equal(fetched.status, 200, '共享数据库即可读取图片，不依赖原实例磁盘或登录 Cookie');
+      assert.equal(fetched.headers['content-type'], 'image/png');
+      assert.deepEqual(fetched.bytes, PNG_1X1);
+      const head = await request(`${secondBase}${uploaded.body.url}`, { method: 'HEAD' });
+      assert.equal(head.status, 200);
+      assert.equal(head.headers['content-length'], String(PNG_1X1.length));
+      assert.equal(head.bytes.length, 0);
+    } finally {
+      secondServer.closeAllConnections?.();
+      await new Promise((resolve) => secondServer.close(resolve));
+      secondDb.close();
+    }
+  });
+});
+
+test('上传持久化：上传目录不可写仍可保存到数据库并回读', async () => {
+  await withEnvironment(async ({ base, center, site }) => {
+    writeFileSync(site.config.uploadsDir, 'not a directory');
+    const { cookie } = await login({ base, center }, 'admin');
+    const uploaded = await upload(base, cookie, multipartBody({ boundary: UPLOAD_BOUNDARY }));
+    assert.equal(uploaded.status, 201, uploaded.text);
+    assert.deepEqual((await request(`${base}${uploaded.body.url}`)).bytes, PNG_1X1);
+  });
+});
+
+test('上传持久化：数据库保存失败不得回报上传成功或只写临时文件', async () => {
+  await withEnvironment(async ({ base, center, site }) => {
+    const { cookie } = await login({ base, center }, 'admin');
+    site.db.saveUpload = () => { throw new Error('test database unavailable'); };
+    const uploaded = await upload(base, cookie, multipartBody({ boundary: UPLOAD_BOUNDARY }));
+    assert.equal(uploaded.status, 500);
+    assert.equal(uploaded.body.error, 'upload_failed');
+    assert.equal(existsSync(site.config.uploadsDir), false);
+  });
+});
+
+test('上传持久化：仍兼容读取旧上传目录中的封面', async () => {
+  await withEnvironment(async ({ base, site }) => {
+    mkdirSync(site.config.uploadsDir, { recursive: true });
+    writeFileSync(join(site.config.uploadsDir, 'legacy.png'), PNG_1X1);
+    const fetched = await request(`${base}/uploads/legacy.png`);
+    assert.equal(fetched.status, 200);
+    assert.deepEqual(fetched.bytes, PNG_1X1);
+  });
+});
+
+test('上传持久化：多个案例共用的封面只在最后一个引用删除后回收', async () => {
+  await withEnvironment(async ({ base, center, site }) => {
+    const { cookie } = await login({ base, center }, 'admin');
+    const uploaded = await upload(base, cookie, multipartBody({ boundary: UPLOAD_BOUNDARY }));
+    const headers = { 'content-type': 'application/json', cookie };
+    const ids = [];
+    for (const name of ['共用封面 A', '共用封面 B']) {
+      const created = await getJson(`${base}/api/agents`, {
+        method: 'POST', headers, body: JSON.stringify({ name, coverImage: uploaded.body.url })
+      });
+      assert.equal(created.status, 201);
+      ids.push(created.body.item.id);
+    }
+    assert.equal((await getJson(`${base}/api/agents/${ids[0]}`, { method: 'DELETE', headers })).status, 200);
+    assert.equal((await request(`${base}${uploaded.body.url}`)).status, 200);
+    assert.equal((await getJson(`${base}/api/agents/${ids[1]}`, { method: 'DELETE', headers })).status, 200);
+    assert.equal((await request(`${base}${uploaded.body.url}`)).status, 404);
+    assert.equal(site.db.findUpload(uploaded.body.url.replace('/uploads/', '')), null);
+  });
+});
+
 test('上传：WebP 回显返回正确 MIME 与原始字节', async () => {
   await withEnvironment(async ({ base, center }) => {
     const { cookie } = await login({ base, center }, 'admin');
@@ -794,7 +877,7 @@ test('链接字段：不可解析地址与控制字符 / 反斜杠在新增和�
   });
 });
 
-test('更新：替换封面回收旧文件，且未提交字段保持原值', async () => {
+test('更新：替换封面回收旧图片，且未提交字段保持原值', async () => {
   await withEnvironment(async ({ base, center, site }) => {
     const { cookie } = await login({ base, center }, 'admin');
     const headers = { 'content-type': 'application/json', cookie };
@@ -802,8 +885,8 @@ test('更新：替换封面回收旧文件，且未提交字段保持原值', as
     const first = await upload(base, cookie, multipartBody({ boundary: UPLOAD_BOUNDARY }));
     assert.equal(first.status, 201);
     const oldCover = first.body.url;
-    const oldFile = join(site.config.uploadsDir, oldCover.replace('/uploads/', ''));
-    assert.ok(existsSync(oldFile), '上传后文件应落盘');
+    const oldFileName = oldCover.replace('/uploads/', '');
+    assert.ok(site.db.findUpload(oldFileName), '上传后图片字节应持久化到数据库');
 
     const created = await getJson(`${base}/api/agents`, {
       method: 'POST',
@@ -827,7 +910,8 @@ test('更新：替换封面回收旧文件，且未提交字段保持原值', as
     assert.equal(updated.status, 200);
     assert.equal(updated.body.item.coverImage, second.body.url, '封面应更新为新文件');
     assert.equal(updated.body.item.painPoint, '原痛点', '未提交字段必须保留原值');
-    assert.equal(existsSync(oldFile), false, '被替换且不再引用的旧封面应被回收');
+    assert.equal(site.db.findUpload(oldFileName), null, '被替换且不再引用的旧封面应被回收');
+    assert.equal((await request(`${base}${oldCover}`)).status, 404);
   });
 });
 

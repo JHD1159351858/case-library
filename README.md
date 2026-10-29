@@ -81,6 +81,12 @@ cd project/frontend && python -m http.server 1002 --bind 127.0.0.1
 | 表 | `users`（SSO 用户档案）/ `sessions`（会话，仅存 token 的 sha256）/ `agents`（智能体数据） |
 | 配置键 | `DB_PATH`（`.env`，默认 `database/agent-website.db`） |
 
+### 封面图片保存
+
+新上传的封面原始图片保存在 `uploaded_images` 表中（SQLite BLOB / PostgreSQL BYTEA），地址仍为 `/uploads/文件名`，无需增加新的存储服务配置。生产环境应配置持久化 `DATABASE_URL`，图片才能跨实例读取并在重新部署后保留；未配置 PostgreSQL 时，图片与 SQLite 数据库文件具有相同的保留期限。
+
+`UPLOADS_DIR` 仅兼容读取旧版磁盘封面。旧 `/tmp` 文件若已经丢失，需要重新上传，数据库里原有的图片地址无法还原图片内容。新表由启动时自动创建；发布后需重启后端。
+
 ## 目录结构
 
 ```text

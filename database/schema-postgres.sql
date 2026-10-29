@@ -79,3 +79,11 @@ CREATE TABLE IF NOT EXISTS featured_agent_settings (
     data_json  TEXT NOT NULL,
     updated_at BIGINT NOT NULL
 );
+
+-- 7. 上传图片字节（共享持久化，不依赖实例临时目录）
+CREATE TABLE IF NOT EXISTS uploaded_images (
+    file_name    TEXT PRIMARY KEY,
+    content_type TEXT NOT NULL,
+    data         BYTEA NOT NULL,
+    created_at   BIGINT NOT NULL
+);

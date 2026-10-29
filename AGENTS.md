@@ -32,7 +32,8 @@ agent-official-website（case-library）：智能体官网，暗黑科幻风滚�
 - `ADMIN_ROLES` / `ADMIN_SSO_UIDS`：管理员判定（角色名大小写不敏感 + uid 白名单兜底，改完重启生效）
 - `DATABASE_URL`：PostgreSQL 连接串（生产持久化首选）。配置后走 PG，`DB_PATH` 被忽略；**生产环境通过平台环境变量/Secret 注入，不要写入仓库或沙箱 `.env`**。连接串必须带 `sslmode=require&channel_binding=require`
 - `DB_PATH`：SQLite 文件路径（仅未配置 `DATABASE_URL` 时使用），默认 `database/agent-website.db`。生产环境（veFaaS）目录只读：`start-cloud.mjs` 在 `COZE_PROJECT_ENV=PROD` 且**未配置 PG** 时把相对 `DB_PATH`/`UPLOADS_DIR` 重定向到 `/tmp/agent-website/`（临时目录，重启数据丢失，仅兜底）；配置了 PG 则不重定向 DB_PATH
-- `UPLOADS_DIR`：封面上传目录，生产环境始终重定向到 `/tmp`（重启丢失，如需长期保留需再接对象存储）
+- 新上传封面的图片本体保存在 `uploaded_images` 表（PostgreSQL BYTEA / SQLite BLOB），保持 `/uploads/文件名` 地址。配置持久化 PostgreSQL 后，图片可跨实例读取并在重新部署后保留；SQLite 则随数据库文件一起保留或丢失。
+- `UPLOADS_DIR`：仅兼容旧版上传文件。生产环境将相对目录重定向到 `/tmp`，此处旧文件仍会丢失；丢失的旧封面需要重新上传。
 - `COZE_API_TOKEN` / `COZE_BOT_ID`：对话查找（扣子），两项齐全才启用
 - 不要设置 `BACKEND_PORT`/`BACKEND_HOST`，避免覆盖平台注入值
 

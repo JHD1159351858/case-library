@@ -194,6 +194,9 @@ export function createDatabase({ databasePath, now = Date.now }) {
       INSERT INTO card_effect_settings (id, data_json, updated_at) VALUES (1, ?, ?)
       ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json, updated_at = excluded.updated_at
     `),
+    saveUpload: database.prepare('INSERT INTO uploaded_images (file_name, content_type, data, created_at) VALUES (?, ?, ?, ?)'),
+    findUpload: database.prepare('SELECT file_name, content_type, data, created_at FROM uploaded_images WHERE file_name = ?'),
+    deleteUpload: database.prepare('DELETE FROM uploaded_images WHERE file_name = ?'),
     featuredAgentSettings: database.prepare('SELECT data_json, updated_at FROM featured_agent_settings WHERE id = 1'),
     saveFeaturedAgentSettings: database.prepare(`
       INSERT INTO featured_agent_settings (id, data_json, updated_at) VALUES (1, ?, ?)
@@ -367,6 +370,24 @@ export function createDatabase({ databasePath, now = Date.now }) {
       const dataJson = JSON.stringify(settings);
       statements.saveCardEffectSettings.run(dataJson, timestamp);
       return { settings: JSON.parse(dataJson), updatedAt: timestamp };
+    },
+
+    saveUpload({ fileName, contentType, data, createdAt }) {
+      statements.saveUpload.run(fileName, contentType, data, createdAt);
+    },
+
+    findUpload(fileName) {
+      const row = statements.findUpload.get(fileName);
+      return row ? {
+        fileName: row.file_name,
+        contentType: row.content_type,
+        data: Buffer.from(row.data),
+        createdAt: row.created_at
+      } : null;
+    },
+
+    deleteUpload(fileName) {
+      statements.deleteUpload.run(fileName);
     },
 
     featuredAgentSettings() {

@@ -318,6 +318,33 @@ export async function createPgStorage(options) {
     return { settings: JSON.parse(dataJson), updatedAt: timestamp };
   }
 
+  /* ------------------------------ 上传图片 ------------------------------ */
+
+  async function saveUpload({ fileName, contentType, data, createdAt }) {
+    await client.query(`
+      INSERT INTO uploaded_images (file_name, content_type, data, created_at)
+      VALUES ($1, $2, decode($3, 'base64'), $4)
+    `, [fileName, contentType, data.toString('base64'), createdAt]);
+  }
+
+  async function findUpload(fileName) {
+    const result = await client.query(`
+      SELECT file_name, content_type, encode(data, 'base64') AS data_base64, created_at
+      FROM uploaded_images WHERE file_name = $1
+    `, [fileName]);
+    const row = result.rows[0];
+    return row ? {
+      fileName: row.file_name,
+      contentType: row.content_type,
+      data: Buffer.from(row.data_base64, 'base64'),
+      createdAt: Number(row.created_at)
+    } : null;
+  }
+
+  async function deleteUpload(fileName) {
+    await client.query('DELETE FROM uploaded_images WHERE file_name = $1', [fileName]);
+  }
+
   /* ------------------------------ 手动热门展示位 ------------------------------ */
 
   async function featuredAgentSettings() {
@@ -439,6 +466,9 @@ export async function createPgStorage(options) {
     agentStats,
     cardEffectSettings,
     saveCardEffectSettings,
+    saveUpload,
+    findUpload,
+    deleteUpload,
     featuredAgentSettings,
     saveFeaturedAgentSettings,
     recordAgentView,

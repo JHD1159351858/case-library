@@ -64,7 +64,8 @@ if (!process.env.BACKEND_HOST) {
  *   此时无需重定向 SQLite 的 DB_PATH。
  * - 未配置 DATABASE_URL 时回退 SQLite：DB_PATH 必须重定向到 /tmp，
  *   但 /tmp 为临时目录，实例重启/重新部署后数据不保留（仅作兜底，不建议长期使用）。
- * - 封面上传目录始终重定向到 /tmp（对象未做持久化时重启会丢失）。
+ * - 新上传封面保存在当前数据库中。UPLOADS_DIR 仅兼容旧文件，
+ *   重定向到 /tmp 后其中的旧文件仍不具备持久性，需要重新上传。
  */
 const isAbsolutePath = (p) => typeof p === 'string' && (p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p));
 const hasPostgres = typeof process.env.DATABASE_URL === 'string' && /^postgres(ql)?:\/\//i.test(process.env.DATABASE_URL);

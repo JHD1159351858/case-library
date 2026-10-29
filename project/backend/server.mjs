@@ -21,7 +21,7 @@
  *   - 会话 Cookie HttpOnly + SameSite=Lax，数据库只存 token 的 sha256 摘要
  */
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { createReadStream, existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, statSync, unlinkSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,7 +37,7 @@ const VISITOR_TTL_SECONDS = 365 * 24 * 60 * 60;
 const SESSION_TTL_MS = SESSION_TTL_SECONDS * 1000;
 const MAX_JSON_BODY_BYTES = 64 * 1024;
 
-/** 封面图片上传限制与白名单（MIME → 落盘扩展名） */
+/** 封面图片上传限制与白名单（MIME → 文件扩展名） */
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const COVER_MIME_EXTENSIONS = {
   'image/png': '.png',
@@ -659,8 +659,8 @@ export function extractUploadFile(buffer, boundary) {
   return null;
 }
 
-/** 托管上传目录（仅允许已知图片扩展名，防目录穿越） */
-function serveUpload(request, response, pathname, config) {
+/** 从数据库读取封面，兼容旧上传目录（仅允许已知图片扩展名，防目录穿越） */
+async function serveUpload(request, response, pathname, config, db) {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return sendJson(response, 405, { error: 'method_not_allowed' });
   }
@@ -678,6 +678,15 @@ function serveUpload(request, response, pathname, config) {
   const filePath = resolve(config.uploadsDir, relative);
   if (filePath !== config.uploadsDir && !filePath.startsWith(config.uploadsDir + sep)) {
     return sendJson(response, 403, { error: 'forbidden' });
+  }
+  const uploaded = await db.findUpload(relative);
+  if (uploaded) {
+    response.writeHead(200, {
+      'content-type': uploaded.contentType,
+      'content-length': uploaded.data.length,
+      'cache-control': 'public, max-age=3600'
+    });
+    return response.end(request.method === 'HEAD' ? undefined : uploaded.data);
   }
   if (!existsSync(filePath) || !statSync(filePath).isFile()) {
     return sendJson(response, 404, { error: 'not_found' });
@@ -1229,7 +1238,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     }
   }
 
-  /** 删除不再被引用的站内封面文件（外链忽略；失败仅告警） */
+  /** 删除不再被引用的站内封面及旧文件（外链忽略；失败仅告警） */
   async function removeUploadIfUnused(coverImage) {
     if (!coverImage || !coverImage.startsWith(UPLOAD_URL_PREFIX)) return;
     if (await db.isCoverInUse(coverImage)) return;
@@ -1237,6 +1246,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     const filePath = resolve(config.uploadsDir, relative);
     if (filePath !== config.uploadsDir && !filePath.startsWith(config.uploadsDir + sep)) return;
     try {
+      await db.deleteUpload(relative);
       if (existsSync(filePath)) unlinkSync(filePath);
     } catch (error) {
       logger.warn(`[uploads] 旧封面清理失败 ${coverImage}:`, error?.message ?? error);
@@ -1277,15 +1287,14 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     if (file.data.length > MAX_UPLOAD_BYTES) return sendJson(response, 413, { error: 'file_too_large' });
     if (!file.data.length) return sendJson(response, 400, { error: 'empty_file' });
 
-    // 内容校验：文件头必须真的是图片；落盘扩展名以实际内容为准（不信任客户端声明的 MIME）
+    // 内容校验：文件头必须真的是图片；扩展名以实际内容为准（不信任客户端声明的 MIME）
     const sniffedMime = sniffImageMime(file.data);
     const sniffedExtension = COVER_MIME_EXTENSIONS[sniffedMime];
     if (!sniffedExtension) return sendJson(response, 400, { error: 'invalid_image_data' });
 
     try {
-      mkdirSync(config.uploadsDir, { recursive: true });
       const fileName = `${Date.now()}_${randomUUID().slice(0, 8)}${sniffedExtension}`;
-      writeFileSync(join(config.uploadsDir, fileName), file.data);
+      await db.saveUpload({ fileName, contentType: sniffedMime, data: file.data, createdAt: now() });
       logger.info(`[uploads] 封面已保存 uid=${user.sso_uid} file=${fileName} type=${sniffedMime}`);
       return sendJson(response, 201, { url: `${UPLOAD_URL_PREFIX}${fileName}` });
     } catch (error) {
@@ -1377,7 +1386,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
         return sendJson(response, 405, { error: 'method_not_allowed' });
       }
       if (pathname.startsWith(UPLOAD_URL_PREFIX)) {
-        return serveUpload(request, response, pathname, config);
+        return await serveUpload(request, response, pathname, config, db);
       }
       if (pathname.startsWith('/api/')) return sendJson(response, 404, { error: 'not_found', path: pathname });
       return serveStatic(request, response, pathname, config);
@@ -1461,7 +1470,7 @@ export async function startPreviewServer(overrides = {}, { logger = console, age
       logger.info(`  认证中心    ${config.ssoCenterUrl || '（未配置 SSO_CENTER_URL）'}`);
       logger.info(`  密钥        ${config.ssoSharedSecret ? `已配置（${config.ssoSharedSecret.length} 字符）` : '（未配置 SSO_SHARED_SECRET）'}`);
       logger.info(`  数据库      ${dbLabel}`);
-      logger.info(`  封面上传    ${config.uploadsDir}`);
+      logger.info(`  封面上传    数据库持久化（旧目录兼容：${config.uploadsDir}）`);
       logger.info(`  白名单      ${config.allowedReturnOrigins.join(', ') || '（无）'}`);
       logger.info('──────────────────────────────────────────────');
       resolveListen();

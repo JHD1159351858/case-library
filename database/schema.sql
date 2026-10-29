@@ -114,3 +114,11 @@ CREATE TABLE IF NOT EXISTS featured_agent_settings (
   data_json  TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 ) STRICT;
+
+-- 上传图片字节与数据库共同持久化，不依赖实例临时目录。
+CREATE TABLE IF NOT EXISTS uploaded_images (
+  file_name    TEXT PRIMARY KEY,
+  content_type TEXT NOT NULL,
+  data         BLOB NOT NULL,
+  created_at   INTEGER NOT NULL
+) STRICT;
