@@ -20,7 +20,7 @@
  *   - 权限边界：未登录 401 / 非管理员 403 / 管理员 201
  *   - 输入校验：缺名称 400、非法 JSON 400、超长 400
  *   - 检索与详情接口、LIKE 通配符转义、方法限制
- *   - 封面上传：multipart 解析、内容魔数校验、3 MB 上限（413 响应可读）、封面替换回收
+ *   - 封面上传：multipart 解析、内容魔数校验、10 MB 上限（413 响应可读）、封面替换回收
  *   - 字段完整性：新增后列表 / 详情返回全部已填写字段，链接字段校验与安全属性
  *   - 浏览统计：身份去重、管理员排除、明细权限 / 隐私、分页、来源校验与删除回收
  *
@@ -652,15 +652,32 @@ test('上传：权限与内容校验（401 匿名 / 403 非管理员 / 415 类�
   });
 });
 
-test('上传：超过 3 MB 返回 413 且响应体可读（回归：超限不得中断响应）', async () => {
-  await withEnvironment(async ({ base, center }) => {
-    const { cookie } = await login({ base, center }, 'admin');
-    const oversized = multipartBody({ boundary: UPLOAD_BOUNDARY, data: Buffer.alloc(3 * 1024 * 1024 + 64 * 1024, 1) });
-    const result = await upload(base, cookie, oversized);
-    assert.equal(result.status, 413, '超限必须返回 413，而不是连接被中断');
-    assert.equal(result.body.error, 'file_too_large', '前端依赖该错误码给出「图片超过 3 MB」提示');
+for (const size of [4 * 1024 * 1024, 10 * 1024 * 1024]) {
+  test(`上传：${size / 1024 / 1024} MB 图片可上传并完整回读`, async () => {
+    await withEnvironment(async ({ base, center }) => {
+      const { cookie } = await login({ base, center }, 'admin');
+      const image = Buffer.alloc(size);
+      PNG_1X1.copy(image);
+      const result = await upload(base, cookie, multipartBody({ boundary: UPLOAD_BOUNDARY, data: image }));
+      assert.equal(result.status, 201, result.text);
+      const fetched = await request(`${base}${result.body.url}`);
+      assert.equal(fetched.status, 200);
+      assert.deepEqual(fetched.bytes, image);
+    });
   });
-});
+}
+
+for (const extra of [1, 64 * 1024]) {
+  test(`上传：超过 10 MB ${extra} 字节返回可读的 413`, async () => {
+    await withEnvironment(async ({ base, center }) => {
+      const { cookie } = await login({ base, center }, 'admin');
+      const oversized = multipartBody({ boundary: UPLOAD_BOUNDARY, data: Buffer.alloc(10 * 1024 * 1024 + extra, 1) });
+      const result = await upload(base, cookie, oversized);
+      assert.equal(result.status, 413, '超限必须返回 413，而不是连接被中断');
+      assert.equal(result.body.error, 'file_too_large', '前端依赖该错误码给出「图片超过 10 MB」提示');
+    });
+  });
+}
 
 test('请求体超限：JSON 超过 64 KB 返回 413 且响应体可读（回归）', async () => {
   await withEnvironment(async ({ base, center }) => {

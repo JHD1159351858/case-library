@@ -38,7 +38,7 @@ const SESSION_TTL_MS = SESSION_TTL_SECONDS * 1000;
 const MAX_JSON_BODY_BYTES = 64 * 1024;
 
 /** 封面图片上传限制与白名单（MIME → 落盘扩展名） */
-const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const COVER_MIME_EXTENSIONS = {
   'image/png': '.png',
   'image/jpeg': '.jpg',

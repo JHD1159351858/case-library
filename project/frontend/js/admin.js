@@ -15,7 +15,7 @@ import { initCardEffects } from './card-effects-admin.js';
 
 const $ = (id) => document.getElementById(id);
 
-const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 /** 与服务端 COVER_MIME_EXTENSIONS 对齐的可接受图片类型（上传前预检） */
 const COVER_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
@@ -453,7 +453,7 @@ const UPLOAD_ERROR_TEXT = {
   401: '登录状态已失效，请重新登录后再上传。',
   403: '当前账号不是管理员，无权上传封面。',
   404: '上传接口不存在（/api/uploads）：后端可能仍是旧进程，请重启后端后重试。',
-  413: '图片超过 3 MB 上限，请压缩后重试。',
+  413: '图片超过 10 MB 上限，请压缩后重试。',
   415: '仅支持 PNG / JPG / WebP / GIF 格式。'
 };
 
@@ -486,7 +486,7 @@ async function uploadCover(file) {
     return;
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    const message = `图片过大（${(file.size / 1024 / 1024).toFixed(1)} MB），请压缩到 3 MB 以内。`;
+    const message = `图片过大（${(file.size / 1024 / 1024).toFixed(1)} MB），请压缩到 10 MB 以内。`;
     setCoverStatus(message, 'error');
     setNotice(message, 'error');
     return;

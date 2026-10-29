@@ -623,7 +623,7 @@ test('选图上传：图片旁持续显示上传中及成功结果，并回显�
 for (const [file, reason] of [
   [{ ...image, type: 'image/bmp' }, /不支持.*PNG/],
   [{ ...image, size: 0 }, /内容为空/],
-  [{ ...image, size: 4 * 1024 * 1024 }, /过大.*3 MB/]
+  [{ ...image, size: 10 * 1024 * 1024 + 1 }, /过大.*10 MB/]
 ]) {
   test(`选图上传：${reason.source}在图片旁显示原因，不发送请求`, async () => {
     let requests = 0;
@@ -634,6 +634,21 @@ for (const [file, reason] of [
     assert.equal(get('cover-status').dataset.tone, 'error');
     assert.equal(requests, 0);
     assert.equal(get('form-submit').disabled, false);
+  });
+}
+
+for (const size of [4 * 1024 * 1024, 10 * 1024 * 1024]) {
+  test(`选图上传：${size / 1024 / 1024} MB 图片可以上传`, async () => {
+    let requests = 0;
+    const { get } = page('admin', { fetch: async () => {
+      requests++;
+      return uploaded('/uploads/large-cover.png');
+    } });
+    get('cover-file').files = [{ ...image, size }];
+    await get('cover-file').dispatch('change');
+    assert.equal(requests, 1);
+    assert.equal(get('field-cover').value, '/uploads/large-cover.png');
+    assert.match(get('cover-status').textContent, /上传成功/);
   });
 }
 
@@ -709,7 +724,7 @@ for (const failure of ['HTTP', '网络']) {
     assert.equal(get('form-submit').disabled, false);
     assert.equal(get('field-cover').value, '/uploads/existing.png');
     assert.match(get('cover-preview').innerHTML, /existing.png/);
-    assert.match(get('cover-status').textContent, failure === 'HTTP' ? /3 MB/ : /无法连接/);
+    assert.match(get('cover-status').textContent, failure === 'HTTP' ? /10 MB/ : /无法连接/);
     assert.equal(get('cover-status').dataset.tone, 'error');
     assert.equal(get('create-notice').dataset.tone, 'error');
   });

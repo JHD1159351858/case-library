@@ -51,5 +51,5 @@ agent-official-website（case-library）：智能体官网，暗黑科幻风滚�
 ## 代码风格与注意事项
 - 全项目零 npm 依赖，禁止引入包管理器；标点半角，ES Modules
 - 改后端代码必须重启进程；前端静态资源刷新即可
-- 路径穿越防护、上传魔数校验（3 MB 上限）、会话仅存 token sha256，修改时勿破坏
+- 路径穿越防护、上传魔数校验（10 MB 上限）、会话仅存 token sha256，修改时勿破坏
 - 文档：`doc/restore-spec.md`（首页还原基准）、`doc/sso-integration.md`（SSO 契约）
