@@ -386,12 +386,8 @@ p {
   }
 }
 
-/* 桌面首页以 1920 × 1080 为基准，字号与 rem 间距一起随可用视口缩放。 */
+/* 桌面图标跟随统一的字号与间距缩放。 */
 @media (min-width: 1024px) {
-  :root {
-    font-size: min(16px, 0.833333vw, 1.481481dvh);
-  }
-
   .skip-finale-arrow svg {
     width: 0.875rem;
     height: 0.875rem;

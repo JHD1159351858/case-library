@@ -1,0 +1,6 @@
+/* Shared desktop proportions, using a 1920 × 1080 viewport as the reference. */
+@media (min-width: 1024px) {
+  :root {
+    font-size: min(16px, 0.833333333vw, 1.481481481dvh);
+  }
+}

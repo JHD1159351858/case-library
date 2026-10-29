@@ -54,7 +54,7 @@ body {
     var(--bg);
   color: var(--text);
   font-family: 'Anybody', system-ui, sans-serif;
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
@@ -242,13 +242,13 @@ a {
 
 /* ---- 布局 ---- */
 .app-main {
-  max-width: 1180px;
+  max-width: 73.75rem;
   margin: 0 auto;
   padding: 2.5rem 1.25rem 4.5rem;
 }
 
 .app-main-narrow {
-  max-width: 880px;
+  max-width: 55rem;
 }
 
 .page-head {
@@ -369,7 +369,7 @@ a {
   }
 }
 
-@media (min-width: 1080px) {
+@media (min-width: 1024px) {
   .card-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -609,13 +609,13 @@ a {
 }
 
 .modal.modal-card-effects {
-  width: 1040px;
+  width: 65rem;
   max-width: calc(100vw - 3rem);
 }
 
 .card-effects-layout {
   display: grid;
-  grid-template-columns: 330px minmax(0, 1fr);
+  grid-template-columns: 20.625rem minmax(0, 1fr);
   gap: 2rem;
   align-items: start;
 }
@@ -785,7 +785,7 @@ a {
 }
 
 .skeleton-card {
-  height: 168px;
+  height: 10.5rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: linear-gradient(100deg, rgba(255, 255, 255, 0.03) 30%, rgba(255, 255, 255, 0.075) 50%, rgba(255, 255, 255, 0.03) 70%);

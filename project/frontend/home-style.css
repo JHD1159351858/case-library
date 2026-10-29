@@ -30,7 +30,7 @@
   --style-active-text: #07332e;
 }
 .home-style-switch--ocean {
-  margin: 10px 0 0 6.3%;
+  margin: 0.625rem 0 0 6.3%;
   --style-border: #092c4b30;
   --style-background: #edf5f2c9;
   --style-text: #092c4b;
