@@ -120,10 +120,16 @@ export function createDatabase({ databasePath, now = Date.now }) {
     deleteSession: database.prepare('DELETE FROM sessions WHERE token_hash = ?'),
     purgeSessions: database.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
     listAgents: database.prepare(`
+      WITH featured AS (
+        SELECT slot.value AS agent_id, CAST(slot.key AS INTEGER) AS position
+        FROM featured_agent_settings AS settings, json_each(settings.data_json) AS slot
+        WHERE settings.id = 1 AND slot.type = 'text'
+      )
       SELECT ${AGENT_LIST_COLUMNS}
-      FROM agents
+      FROM agents LEFT JOIN featured ON featured.agent_id = agents.id
       WHERE ${AGENT_FILTER_SQL}
-      ORDER BY updated_at DESC, id ASC
+      ORDER BY CASE WHEN featured.position IS NULL THEN 1 ELSE 0 END,
+        featured.position ASC, updated_at DESC, id ASC
       LIMIT :limit OFFSET :offset
     `),
     countAgentsFiltered: database.prepare(`
@@ -186,6 +192,11 @@ export function createDatabase({ databasePath, now = Date.now }) {
     cardEffectSettings: database.prepare('SELECT data_json, updated_at FROM card_effect_settings WHERE id = 1'),
     saveCardEffectSettings: database.prepare(`
       INSERT INTO card_effect_settings (id, data_json, updated_at) VALUES (1, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json, updated_at = excluded.updated_at
+    `),
+    featuredAgentSettings: database.prepare('SELECT data_json, updated_at FROM featured_agent_settings WHERE id = 1'),
+    saveFeaturedAgentSettings: database.prepare(`
+      INSERT INTO featured_agent_settings (id, data_json, updated_at) VALUES (1, ?, ?)
       ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json, updated_at = excluded.updated_at
     `)
   };
@@ -358,6 +369,18 @@ export function createDatabase({ databasePath, now = Date.now }) {
       return { settings: JSON.parse(dataJson), updatedAt: timestamp };
     },
 
+    featuredAgentSettings() {
+      const row = statements.featuredAgentSettings.get();
+      if (!row) return { agentIds: [null, null, null], updatedAt: null };
+      return { agentIds: normalizeFeaturedAgentIds(row.data_json), updatedAt: row.updated_at };
+    },
+
+    saveFeaturedAgentSettings(agentIds, timestamp = now()) {
+      const normalized = normalizeFeaturedAgentIds(agentIds);
+      statements.saveFeaturedAgentSettings.run(JSON.stringify(normalized), timestamp);
+      return { agentIds: normalized, updatedAt: timestamp };
+    },
+
     /** 访客身份由请求层确定；统计写入不修改案例更新时间。 */
     recordAgentView({ agentId, visitorKey, userId = null, timestamp = now() }) {
       statements.recordAgentView.run(agentId, visitorKey, userId, timestamp, timestamp);
@@ -400,4 +423,20 @@ export function createDatabase({ databasePath, now = Date.now }) {
 /** LIKE 通配符转义（配合 ESCAPE '\'） */
 function escapeLike(value) {
   return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+function normalizeFeaturedAgentIds(value) {
+  let parsed = value;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      parsed = [];
+    }
+  }
+  if (!Array.isArray(parsed)) parsed = [];
+  return Array.from({ length: 3 }, (_, index) => {
+    const id = parsed[index];
+    return typeof id === 'string' && id.trim() ? id.trim() : null;
+  });
 }

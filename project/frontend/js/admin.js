@@ -27,7 +27,15 @@ const state = {
   uploading: false,
   submitting: false,
   coverUploadRequest: 0,
-  detailRequest: 0
+  detailRequest: 0,
+  featuredConfigured: false,
+  featuredPublishedAgentIds: [null, null, null],
+  featuredDraftAgentIds: [null, null, null],
+  featuredLoaded: false,
+  featuredLoading: false,
+  featuredSaving: false,
+  featuredReadRequest: 0,
+  featuredInitialized: false
 };
 
 /* ---------------- 门禁 ---------------- */
@@ -221,6 +229,215 @@ async function loadAgents() {
     toast('读取记录失败，请确认后端服务已启动', 'error');
   }
   renderRows();
+  renderFeaturedSettingsOptions();
+}
+
+/* ---------------- 热门案例展示位 ---------------- */
+
+function normalizeFeaturedAgentIds(agentIds) {
+  const source = Array.isArray(agentIds) ? agentIds : [];
+  return [0, 1, 2].map((index) => {
+    const value = source[index];
+    return typeof value === 'string' && value.trim() ? value.trim() : null;
+  });
+}
+
+function featuredAgentIdsEqual(left, right) {
+  const a = normalizeFeaturedAgentIds(left);
+  const b = normalizeFeaturedAgentIds(right);
+  return a.every((value, index) => value === b[index]);
+}
+
+function hasDuplicateFeaturedAgents(agentIds) {
+  const selected = normalizeFeaturedAgentIds(agentIds).filter(Boolean);
+  return new Set(selected).size !== selected.length;
+}
+
+function readFeaturedSettingsSelection() {
+  return normalizeFeaturedAgentIds([1, 2, 3].map((position) => $(`featured-slot-${position}`)?.value));
+}
+
+function setFeaturedNotice(message, tone = '') {
+  const notice = $('featured-notice');
+  if (!notice) return;
+  notice.textContent = message;
+  notice.dataset.tone = tone;
+}
+
+function setFeaturedControlsDisabled() {
+  const disabled = !state.featuredLoaded || state.featuredLoading || state.featuredSaving;
+  for (const position of [1, 2, 3]) {
+    const select = $(`featured-slot-${position}`);
+    if (select) select.disabled = disabled;
+  }
+  const save = $('featured-save');
+  if (save) save.disabled = disabled;
+}
+
+function renderFeaturedSettingsOptions() {
+  const selectedIds = normalizeFeaturedAgentIds(state.featuredDraftAgentIds);
+  const availableIds = new Set(state.items.map((item) => item.id));
+
+  for (const position of [1, 2, 3]) {
+    const select = $(`featured-slot-${position}`);
+    if (!select) continue;
+    const selectedId = selectedIds[position - 1];
+    select.innerHTML = '';
+
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = '不展示';
+    select.appendChild(empty);
+
+    for (const agent of state.items) {
+      const option = document.createElement('option');
+      option.value = agent.id;
+      option.textContent = `${agent.name}${agent.status === 'inactive' ? '（未启用）' : ''}`;
+      select.appendChild(option);
+    }
+
+    // 列表临时读取失败时保留未保存选择，避免一次刷新清空用户正在编辑的配置。
+    if (selectedId && !availableIds.has(selectedId)) {
+      const current = document.createElement('option');
+      current.value = selectedId;
+      current.textContent = `当前选择（${selectedId}）`;
+      select.appendChild(current);
+    }
+    select.value = selectedId ?? '';
+  }
+  setFeaturedControlsDisabled();
+}
+
+function publishedFeaturedNotice() {
+  if (!state.featuredConfigured) {
+    return '当前尚未手动配置，查询页继续按浏览热度自动展示 TOP 3。保存后将切换为手动展示；三个位置全部留空并保存，会隐藏全部热门案例。';
+  }
+  if (state.featuredPublishedAgentIds.every((agentId) => agentId === null)) {
+    return '当前已手动配置为不展示任何热门案例。';
+  }
+  return '当前热门 TOP 位置已由管理员手动配置。修改选择后点击“保存热门展示”生效。';
+}
+
+function handleFeaturedSettingsChange() {
+  state.featuredDraftAgentIds = readFeaturedSettingsSelection();
+  const dirty = !featuredAgentIdsEqual(state.featuredDraftAgentIds, state.featuredPublishedAgentIds);
+  if (hasDuplicateFeaturedAgents(state.featuredDraftAgentIds)) {
+    setFeaturedNotice('同一个案例不能重复占用多个热门位置，请为 TOP 1 / 2 / 3 选择不同案例。', 'error');
+  } else if (dirty) {
+    setFeaturedNotice('当前选择尚未保存；查询页仍使用上一次已发布的热门配置。', 'warn');
+  } else {
+    setFeaturedNotice(publishedFeaturedNotice());
+  }
+}
+
+async function loadFeaturedSettings() {
+  const request = ++state.featuredReadRequest;
+  state.featuredLoading = true;
+  setFeaturedControlsDisabled();
+  setFeaturedNotice('正在读取当前热门展示配置…');
+
+  try {
+    const { ok, status, data } = await fetchJson('/api/featured-agents');
+    if (request !== state.featuredReadRequest) return;
+    if (!ok || !Array.isArray(data?.agentIds)) {
+      state.featuredLoaded = false;
+      setFeaturedNotice(
+        status === 404 ? '热门展示接口不可用，请重启最新后端后重试。' : '读取热门展示配置失败，请刷新后重试。',
+        'error'
+      );
+      return;
+    }
+
+    const published = normalizeFeaturedAgentIds(data.agentIds);
+    const hasUnsavedChanges = !featuredAgentIdsEqual(
+      state.featuredDraftAgentIds,
+      state.featuredPublishedAgentIds
+    );
+    state.featuredConfigured = Boolean(data.configured);
+    state.featuredPublishedAgentIds = published;
+    state.featuredLoaded = true;
+    if (!hasUnsavedChanges) state.featuredDraftAgentIds = [...published];
+    renderFeaturedSettingsOptions();
+    setFeaturedNotice(
+      hasUnsavedChanges ? '已刷新已发布配置；你当前未保存的选择仍被保留。' : publishedFeaturedNotice(),
+      hasUnsavedChanges ? 'warn' : ''
+    );
+  } catch {
+    if (request !== state.featuredReadRequest) return;
+    state.featuredLoaded = false;
+    setFeaturedNotice('无法连接后端，未读取到热门展示配置，当前不能保存。', 'error');
+  } finally {
+    if (request === state.featuredReadRequest) {
+      state.featuredLoading = false;
+      setFeaturedControlsDisabled();
+    }
+  }
+}
+
+async function saveFeaturedSettings(event) {
+  event?.preventDefault?.();
+  if (!state.featuredLoaded || state.featuredLoading || state.featuredSaving) return;
+
+  const agentIds = readFeaturedSettingsSelection();
+  state.featuredDraftAgentIds = [...agentIds];
+  if (hasDuplicateFeaturedAgents(agentIds)) {
+    setFeaturedNotice('同一个案例不能重复占用多个热门位置，请选择不同案例后再保存。', 'error');
+    return;
+  }
+
+  state.featuredSaving = true;
+  state.featuredReadRequest += 1;
+  setFeaturedControlsDisabled();
+  setFeaturedNotice('正在保存热门展示配置…');
+
+  try {
+    const { ok, status, data } = await fetchJson('/api/featured-agents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agentIds })
+    });
+    if (!ok || !Array.isArray(data?.agentIds)) {
+      const messageMap = {
+        400: '热门位置选择不合法或案例已不存在，未保存当前修改。',
+        401: '登录状态已失效，未保存当前修改。',
+        403: '当前账号不是管理员，无法保存热门展示。',
+        500: '热门展示保存失败，当前选择已保留，请稍后重试。'
+      };
+      setFeaturedNotice(messageMap[status] ?? `热门展示保存失败（HTTP ${status ?? '未知'}），当前选择已保留。`, 'error');
+      return;
+    }
+
+    const saved = normalizeFeaturedAgentIds(data.agentIds);
+    state.featuredConfigured = Boolean(data.configured ?? true);
+    state.featuredPublishedAgentIds = saved;
+    state.featuredDraftAgentIds = [...saved];
+    state.featuredLoaded = true;
+    renderFeaturedSettingsOptions();
+    setFeaturedNotice(
+      saved.every((agentId) => agentId === null)
+        ? '保存成功：查询页将不展示任何热门案例。'
+        : '保存成功：热门 TOP 1 / 2 / 3 已按当前选择更新。',
+      'success'
+    );
+  } catch {
+    setFeaturedNotice('无法连接后端，热门展示未保存；当前选择已保留。', 'error');
+  } finally {
+    state.featuredSaving = false;
+    setFeaturedControlsDisabled();
+  }
+}
+
+async function initFeaturedSettings() {
+  if (!state.session.user?.isAdmin) return;
+  if (!state.featuredInitialized) {
+    state.featuredInitialized = true;
+    $('featured-settings-form')?.addEventListener('submit', saveFeaturedSettings);
+    for (const position of [1, 2, 3]) {
+      $(`featured-slot-${position}`)?.addEventListener('change', handleFeaturedSettingsChange);
+    }
+  }
+  renderFeaturedSettingsOptions();
+  await loadFeaturedSettings();
 }
 
 /* ---------------- 删除（二次确认：按钮变红再点一次） ---------------- */
@@ -883,7 +1100,11 @@ $('form-draft')?.addEventListener('click', () => saveCreateDraft());
 
 $('refresh-list')?.addEventListener('click', loadAgents);
 $('refresh-all')?.addEventListener('click', async () => {
-  await Promise.all([loadAgents(), loadStats()]);
+  await Promise.all([
+    loadAgents(),
+    loadStats(),
+    ...(state.session.user?.isAdmin ? [loadFeaturedSettings()] : [])
+  ]);
   toast('已刷新');
 });
 $('agent-form')?.addEventListener('submit', submitForm);
@@ -927,6 +1148,7 @@ $('cover-file')?.addEventListener('change', async (event) => {
 await refreshSession();
 if (state.session.user?.isAdmin) initCardEffects({ isAdmin: () => Boolean(state.session.user?.isAdmin) });
 await Promise.all([loadAgents(), loadStats()]);
+if (state.session.user?.isAdmin) await initFeaturedSettings();
 
 // 登录 / 退出回调提示（login=ok / logout=1 / login_error=xx）
 const authNotice = consumeAuthNotice();

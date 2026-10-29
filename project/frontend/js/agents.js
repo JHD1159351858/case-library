@@ -33,6 +33,7 @@ const state = {
   status: '',
   usingDemo: false,
   popular: new Map(),
+  featuredAgents: null,
   cardEffects: { ...DEFAULT_CARD_EFFECT_SETTINGS },
   listRequest: 0,
   detailId: null,
@@ -71,7 +72,9 @@ function renderMeta() {
   }
   meta.innerHTML = condition
     ? `${condition} 匹配到 <strong>${state.total}</strong> 条记录。`
-    : `共 <strong>${state.total}</strong> 条记录，按更新时间倒序。`;
+    : state.featuredAgents?.configured
+      ? `共 <strong>${state.total}</strong> 条记录，管理员置顶案例优先，其余按更新时间倒序。`
+      : `共 <strong>${state.total}</strong> 条记录，按更新时间倒序。`;
 }
 
 function renderPagination() {
@@ -123,7 +126,7 @@ function renderCard(agent) {
 
   card.innerHTML = `
     ${cover}
-    ${popularity ? `<span class="agent-popularity" title="按全库累计浏览次数排名，次数相同时按更新时间排序">热门 TOP ${popularity.rank}<em>${popularity.viewCount} 次浏览</em></span>` : ''}
+    ${popularity ? `<span class="agent-popularity" title="${state.featuredAgents?.configured ? '管理员设置的热门展示位' : '按全库累计浏览次数排名，次数相同时按更新时间排序'}">热门 TOP ${popularity.rank}<em>${popularity.viewCount} 次浏览</em></span>` : ''}
     <div class="agent-card-name">${escapeHtml(agent.name)}</div>
     <p class="agent-card-summary">${escapeHtml(agent.summary || '暂无简介')}</p>
     ${renderCardMeta(agent)}
@@ -337,8 +340,32 @@ function selectPopularAgents(items) {
   return new Map(ranked.map((agent, index) => [agent.id, { rank: index + 1, viewCount: agent.viewStats.viewCount }]));
 }
 
+function selectFeaturedAgents(featuredAgents) {
+  const positions = Array.isArray(featuredAgents?.agentIds) ? featuredAgents.agentIds : [];
+  const items = Array.isArray(featuredAgents?.items) ? featuredAgents.items : [];
+  return new Map(items
+    .filter((agent) => Number.isInteger(agent.position) && agent.position >= 1 && agent.position <= 3
+      && positions[agent.position - 1] === agent.id
+      && Number.isFinite(agent.viewStats?.viewCount) && agent.viewStats.viewCount >= 0)
+    .sort((a, b) => a.position - b.position)
+    .map((agent) => [agent.id, { rank: agent.position, viewCount: agent.viewStats.viewCount }]));
+}
+
+async function loadFeaturedAgents() {
+  try {
+    const { ok, data } = await fetchJson('/api/featured-agents');
+    if (!ok || typeof data?.configured !== 'boolean' || !Array.isArray(data.agentIds) || data.agentIds.length !== 3
+      || !Array.isArray(data.items)) throw new Error('featured_unavailable');
+    state.featuredAgents = data;
+  } catch {
+    state.featuredAgents = null;
+  }
+  return state.featuredAgents;
+}
+
 /** 排名读取全库，搜索 / 学科等筛选只改变显示的卡片。 */
 async function loadPopularAgents(firstPage = null) {
+  if (state.featuredAgents?.configured) return selectFeaturedAgents(state.featuredAgents);
   try {
     const items = [];
     let data = firstPage;
@@ -574,7 +601,7 @@ bindPagination();
 bindModal();
 initAgentChat({ openDetail });
 await refreshSession();
-await Promise.all([loadFilterOptions(), loadCardEffects()]);
+await Promise.all([loadFilterOptions(), loadCardEffects(), loadFeaturedAgents()]);
 await loadAgents();
 
 // 登录 / 退出回调提示（login=ok / logout=1 / login_error=xx）

@@ -53,6 +53,7 @@ function page(name, overrides = {}) {
   code = code.split(name === 'agents' ? '/* ---------------- 启动 ---------------- */' : 'await refreshSession();')[0];
   runInContext(code + '\nglobalThis.api = { state, renderDetailBody, openDetail, closeDetail' +
     (name === 'admin' ? ', uploadCover, resetForm, fillForm, startEdit, submitForm' : ', selectPopularAgents, loadPopularAgents, loadAgents, loadCardEffects, renderCard, renderGrid, bindSearch, bindFilters, bindPagination, renderPagination') + ' };', context);
+  runInContext('Object.assign(api, { loadFeaturedAgents: typeof loadFeaturedAgents === "function" ? loadFeaturedAgents : undefined, loadFeaturedSettings: typeof loadFeaturedSettings === "function" ? loadFeaturedSettings : undefined, initFeaturedSettings: typeof initFeaturedSettings === "function" ? initFeaturedSettings : undefined, saveFeaturedSettings: typeof saveFeaturedSettings === "function" ? saveFeaturedSettings : undefined });', context);
   if (name === 'admin') runInContext('renderRows = () => {}; loadAgents = async () => {}; loadStats = async () => {};', context);
   if (name === 'admin') runInContext('Object.assign(api, { renderViewCell: typeof renderViewCell === "function" ? renderViewCell : undefined, openViews: typeof openViews === "function" ? openViews : undefined });', context);
   if (name === 'admin') {
@@ -71,6 +72,145 @@ function sessionApi() {
   runInContext(source('session').replace(/\bexport /g, '') + '\nglobalThis.api = { resolveAgentLink };', context);
   return context.api;
 }
+
+test('置顶热门：手选案例控制原有 TOP 1 和 TOP 3，不由浏览量替换或补位', async () => {
+  const { api } = page('agents', { fetchJson: async () => ({ ok: true, data: {
+    configured: true, agentIds: ['chosen-a', null, 'chosen-c'], updatedAt: 1,
+    items: [
+      { id: 'chosen-a', position: 1, viewStats: { viewCount: 2 } },
+      { id: 'chosen-c', position: 3, viewStats: { viewCount: 0 } }
+    ]
+  } }) });
+  await api.loadFeaturedAgents();
+  const result = await api.loadPopularAgents({ total: 1, items: [{ id: 'automatic', viewStats: { viewCount: 999 } }] });
+  assert.deepEqual([...result.keys()], ['chosen-a', 'chosen-c']);
+  assert.equal(result.get('chosen-a').rank, 1);
+  assert.equal(result.get('chosen-a').viewCount, 2);
+  assert.equal(result.get('chosen-c').rank, 3);
+});
+
+test('置顶热门：明确清空全部展示位后，不再自动产生热门案例', async () => {
+  const { api } = page('agents', { fetchJson: async () => ({ ok: true, data: {
+    configured: true, agentIds: [null, null, null], items: [], updatedAt: 1
+  } }) });
+  await api.loadFeaturedAgents();
+  const result = await api.loadPopularAgents({ total: 1, items: [{ id: 'automatic', viewStats: { viewCount: 99 } }] });
+  assert.equal(result.size, 0);
+});
+
+for (const mode of ['尚未配置', '请求失败']) {
+  test(`置顶热门：${mode}时保留既有自动排行`, async () => {
+    const { api } = page('agents', { fetchJson: async () => {
+      if (mode === '请求失败') throw new Error('network');
+      return { ok: true, data: { configured: false, agentIds: [null, null, null], items: [], updatedAt: null } };
+    } });
+    await api.loadFeaturedAgents();
+    const result = await api.loadPopularAgents({ total: 2, items: [
+      { id: 'lower', viewStats: { viewCount: 1 } }, { id: 'higher', viewStats: { viewCount: 8 } }
+    ] });
+    assert.deepEqual([...result.keys()], ['higher', 'lower']);
+  });
+}
+
+test('置顶后台：保存三个展示位并显示成功，保留空位', async () => {
+  const writes = [];
+  const { api, get } = page('admin', { fetchJson: async (url, options) => {
+    assert.equal(url, '/api/featured-agents');
+    if (options?.method === 'POST') {
+      const data = JSON.parse(options.body);
+      writes.push(data);
+      return { ok: true, data: { configured: true, ...data, items: [], updatedAt: 1 } };
+    }
+    return { ok: true, data: { configured: false, agentIds: [null, null, null], items: [], updatedAt: null } };
+  } });
+  api.state.items = [{ id: 'a', name: '案例甲' }, { id: 'b', name: '案例乙', status: 'inactive' }];
+  await api.initFeaturedSettings();
+  get('featured-slot-1').value = 'b';
+  get('featured-slot-2').value = '';
+  get('featured-slot-3').value = 'a';
+  await api.saveFeaturedSettings();
+  assert.deepEqual(writes, [{ agentIds: ['b', null, 'a'] }]);
+  assert.match(get('featured-notice').textContent, /成功|已保存/);
+  assert.equal(get('featured-save').disabled, false);
+});
+
+test('置顶后台：重复选择当场提示，不发送保存请求', async () => {
+  let writes = 0;
+  const { api, get } = page('admin', { fetchJson: async (url, options) => {
+    if (options?.method === 'POST') writes++;
+    return { ok: true, data: { configured: false, agentIds: [null, null, null], items: [], updatedAt: null } };
+  } });
+  api.state.items = [{ id: 'a', name: '案例甲' }];
+  await api.initFeaturedSettings();
+  get('featured-slot-1').value = 'a';
+  get('featured-slot-2').value = 'a';
+  await api.saveFeaturedSettings();
+  assert.equal(writes, 0);
+  assert.match(get('featured-notice').textContent, /重复|不同/);
+});
+
+test('置顶后台：保存失败保留当前选择，恢复保存按钮', async () => {
+  const { api, get } = page('admin', { fetchJson: async (url, options) => options?.method === 'POST'
+    ? { ok: false, status: 500, data: { error: 'save_failed' } }
+    : { ok: true, data: { configured: false, agentIds: [null, null, null], items: [], updatedAt: null } } });
+  api.state.items = [{ id: 'a', name: '案例甲' }];
+  await api.initFeaturedSettings();
+  get('featured-slot-1').value = 'a';
+  await api.saveFeaturedSettings();
+  assert.equal(get('featured-slot-1').value, 'a');
+  assert.equal(get('featured-save').disabled, false);
+  assert.match(get('featured-notice').textContent, /失败|未保存|无法/);
+});
+
+test('置顶后台：首次读取失败时禁止保存，刷新全部可重试并恢复保存', async () => {
+  let reads = 0;
+  let writes = 0;
+  const { api, get } = page('admin', { fetchJson: async (url, options) => {
+    if (url !== '/api/featured-agents') return { ok: true, data: {} };
+    if (options?.method === 'POST') {
+      writes++;
+      return { ok: true, data: { configured: true, agentIds: [null, null, null], items: [], updatedAt: 2 } };
+    }
+    reads++;
+    return reads === 1
+      ? { ok: false, status: 500, data: { error: 'read_failed' } }
+      : { ok: true, data: { configured: false, agentIds: [null, null, null], items: [], updatedAt: null } };
+  } });
+
+  await api.initFeaturedSettings();
+  assert.equal(get('featured-save').disabled, true);
+  await api.saveFeaturedSettings();
+  assert.equal(writes, 0);
+
+  await get('refresh-all').dispatch('click');
+  assert.equal(reads, 2);
+  assert.equal(get('featured-save').disabled, false);
+});
+
+test('置顶后台：未保存选择跨读取失败和后续成功刷新仍保留', async () => {
+  let reads = 0;
+  const { api, get } = page('admin', { fetchJson: async () => {
+    reads++;
+    if (reads === 2) return { ok: false, status: 500, data: { error: 'read_failed' } };
+    return { ok: true, data: {
+      configured: reads > 1,
+      agentIds: reads > 1 ? ['b', null, null] : [null, null, null],
+      items: [], updatedAt: reads
+    } };
+  } });
+  api.state.items = [{ id: 'a', name: '案例甲' }, { id: 'b', name: '案例乙' }];
+
+  await api.initFeaturedSettings();
+  get('featured-slot-1').value = 'a';
+  get('featured-slot-1').dispatch('change');
+  await api.loadFeaturedSettings();
+  assert.equal(get('featured-save').disabled, true);
+
+  await api.loadFeaturedSettings();
+  assert.equal(get('featured-slot-1').value, 'a');
+  assert.equal(get('featured-save').disabled, false);
+  assert.match(get('featured-notice').textContent, /保留|未保存/);
+});
 
 function paginationItems(total = 13) {
   return Array.from({ length: total }, (_, index) => ({ id: `page-${index + 1}`, name: `第${index + 1}条案例`,

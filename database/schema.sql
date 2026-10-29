@@ -107,3 +107,10 @@ CREATE TABLE IF NOT EXISTS card_effect_settings (
   data_json  TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 ) STRICT;
+
+-- 手动热门展示位：固定三个位置，整组 JSON 原子覆盖；未保存时不插入默认行。
+CREATE TABLE IF NOT EXISTS featured_agent_settings (
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  data_json  TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+) STRICT;

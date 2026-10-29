@@ -915,6 +915,62 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     return sendJson(response, 200, saved);
   }
 
+  async function featuredAgentsPayload(settings = null) {
+    const saved = settings ?? await db.featuredAgentSettings();
+    const agentIds = [...saved.agentIds];
+    const items = [];
+    for (let index = 0; index < agentIds.length; index += 1) {
+      const agentId = agentIds[index];
+      if (!agentId) continue;
+      const row = await db.findAgentById(agentId);
+      if (!row) {
+        agentIds[index] = null;
+        continue;
+      }
+      const stats = await db.agentViewStats(agentId);
+      items.push({ ...agentSummary(row), position: index + 1, viewStats: { viewCount: stats.viewCount } });
+    }
+    return {
+      configured: saved.updatedAt !== null,
+      agentIds,
+      items,
+      updatedAt: saved.updatedAt
+    };
+  }
+
+  async function handleFeaturedAgents(request, response) {
+    return sendJson(response, 200, await featuredAgentsPayload());
+  }
+
+  async function handleSaveFeaturedAgents(request, response) {
+    const user = await currentUser(request);
+    if (!user) return sendJson(response, 401, { error: 'authentication_required' });
+    if (!computeIsAdmin(user, config)) return sendJson(response, 403, { error: 'admin_required' });
+    const origin = request.headers.origin;
+    const fetchSite = String(request.headers['sec-fetch-site'] ?? '').toLowerCase();
+    if ((origin !== undefined && safeOrigin(origin) !== safeOrigin(publicBase(request)))
+      || fetchSite === 'cross-site' || fetchSite === 'same-site') {
+      return sendJson(response, 403, { error: 'cross_origin_forbidden' });
+    }
+    const body = await readAgentPayload(request, response);
+    if (!body) return;
+    if (Object.keys(body).length !== 1 || !Array.isArray(body.agentIds) || body.agentIds.length !== 3) {
+      return sendJson(response, 400, { error: 'invalid_featured_agent_ids' });
+    }
+    const agentIds = body.agentIds.map((value) => typeof value === 'string' ? value.trim() : value);
+    if (agentIds.some((value) => value !== null && (typeof value !== 'string' || !value))
+      || new Set(agentIds.filter(Boolean)).size !== agentIds.filter(Boolean).length) {
+      return sendJson(response, 400, { error: 'invalid_featured_agent_ids' });
+    }
+    for (const agentId of agentIds) {
+      if (agentId && !(await db.findAgentById(agentId))) {
+        return sendJson(response, 400, { error: 'featured_agent_not_found', agentId });
+      }
+    }
+    const saved = await db.saveFeaturedAgentSettings(agentIds, now());
+    return sendJson(response, 200, await featuredAgentsPayload(saved));
+  }
+
   async function handleListAgents(request, response, url) {
     const keyword = url.searchParams.get('q') ?? '';
     const discipline = url.searchParams.get('discipline') ?? '';
@@ -1267,6 +1323,12 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
         if (method === 'GET') return await handleCardEffectSettings(request, response);
         if (method === 'PUT') return await handleSaveCardEffectSettings(request, response);
         response.setHeader('Allow', 'GET, PUT');
+        return sendJson(response, 405, { error: 'method_not_allowed' });
+      }
+      if (pathname === '/api/featured-agents') {
+        if (method === 'GET') return await handleFeaturedAgents(request, response);
+        if (method === 'POST') return await handleSaveFeaturedAgents(request, response);
+        response.setHeader('Allow', 'GET, POST');
         return sendJson(response, 405, { error: 'method_not_allowed' });
       }
       if (pathname === '/api/agents') {

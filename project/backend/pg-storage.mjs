@@ -198,10 +198,18 @@ export async function createPgStorage(options) {
     const filterParams = [keyword, pattern, disciplineVal, schoolVal, statusVal];
 
     const listRes = await client.query(`
+      WITH featured AS (
+        SELECT slot.agent_id, slot.position
+        FROM featured_agent_settings AS settings
+        CROSS JOIN LATERAL jsonb_array_elements_text(settings.data_json::jsonb)
+          WITH ORDINALITY AS slot(agent_id, position)
+        WHERE settings.id = 1 AND slot.agent_id IS NOT NULL
+      )
       SELECT ${AGENT_LIST_COLUMNS}
-      FROM agents
+      FROM agents LEFT JOIN featured ON featured.agent_id = agents.id
       WHERE ${filter}
-      ORDER BY updated_at DESC, id ASC
+      ORDER BY CASE WHEN featured.position IS NULL THEN 1 ELSE 0 END,
+        featured.position ASC, updated_at DESC, id ASC
       LIMIT $6 OFFSET $7
     `, [...filterParams, safeLimit, safeOffset]);
 
@@ -310,6 +318,24 @@ export async function createPgStorage(options) {
     return { settings: JSON.parse(dataJson), updatedAt: timestamp };
   }
 
+  /* ------------------------------ 手动热门展示位 ------------------------------ */
+
+  async function featuredAgentSettings() {
+    const r = await client.query('SELECT data_json, updated_at FROM featured_agent_settings WHERE id = 1');
+    const row = r.rows[0];
+    if (!row) return { agentIds: [null, null, null], updatedAt: null };
+    return { agentIds: normalizeFeaturedAgentIds(row.data_json), updatedAt: Number(row.updated_at) };
+  }
+
+  async function saveFeaturedAgentSettings(agentIds, timestamp = now()) {
+    const normalized = normalizeFeaturedAgentIds(agentIds);
+    await client.query(`
+      INSERT INTO featured_agent_settings (id, data_json, updated_at) VALUES (1, $1, $2)
+      ON CONFLICT (id) DO UPDATE SET data_json = EXCLUDED.data_json, updated_at = EXCLUDED.updated_at
+    `, [JSON.stringify(normalized), timestamp]);
+    return { agentIds: normalized, updatedAt: timestamp };
+  }
+
   /* ------------------------------ 浏览统计 ------------------------------ */
 
   function recordAgentView({ agentId, visitorKey, userId = null, timestamp = now() }) {
@@ -413,10 +439,28 @@ export async function createPgStorage(options) {
     agentStats,
     cardEffectSettings,
     saveCardEffectSettings,
+    featuredAgentSettings,
+    saveFeaturedAgentSettings,
     recordAgentView,
     agentViewStats,
     agentViewStatsForAgents,
     listAgentViews,
     close
   };
+}
+
+function normalizeFeaturedAgentIds(value) {
+  let parsed = value;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      parsed = [];
+    }
+  }
+  if (!Array.isArray(parsed)) parsed = [];
+  return Array.from({ length: 3 }, (_, index) => {
+    const id = parsed[index];
+    return typeof id === 'string' && id.trim() ? id.trim() : null;
+  });
 }

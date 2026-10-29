@@ -66,13 +66,40 @@
         </div>
       </section>
 
+      <section class="panel featured-settings-panel">
+        <div class="panel-head">
+          <h2>热门案例展示</h2>
+          <p>手动指定查询页现有的热门 TOP 1 / 2 / 3；每个位置可留空，未启用案例也可选择。</p>
+        </div>
+        <form id="featured-settings-form">
+          <div class="featured-settings-grid">
+            <div class="field">
+              <label for="featured-slot-1">热门 TOP 1</label>
+              <select class="input" id="featured-slot-1" disabled><option value="">正在读取…</option></select>
+            </div>
+            <div class="field">
+              <label for="featured-slot-2">热门 TOP 2</label>
+              <select class="input" id="featured-slot-2" disabled><option value="">正在读取…</option></select>
+            </div>
+            <div class="field">
+              <label for="featured-slot-3">热门 TOP 3</label>
+              <select class="input" id="featured-slot-3" disabled><option value="">正在读取…</option></select>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" id="featured-save" type="submit" disabled>保存热门展示</button>
+          </div>
+          <div class="notice" id="featured-notice" role="status" aria-live="polite">正在读取当前热门展示配置…</div>
+        </form>
+      </section>
+
       <div class="admin-grid">
         <!-- 现有记录 -->
         <section class="panel">
           <div class="panel-head row-between">
             <div>
               <h2>现有智能体记录</h2>
-              <p>共 <span class="mono" id="agent-total">0</span> 条；点击名称查看案例，点击浏览人数查看访客明细，右侧可编辑 / 删除。</p>
+              <p>共 <span class="mono" id="agent-total">0</span> 条；默认按热门 TOP 1 / 2 / 3 优先，其余记录保持原有顺序。点击名称查看案例，右侧可编辑 / 删除。</p>
             </div>
             <div class="row-between">
               <button class="btn btn-ghost btn-sm" type="button" id="card-effects-open">卡片效果</button>

@@ -1088,6 +1088,138 @@ test('浏览统计：删除案例级联回收其浏览记录，不影响其他�
   });
 });
 
+/* ---------------- 手动热门展示位 ---------------- */
+
+async function createFeaturedCase(base, cookie, name, overrides = {}) {
+  const created = await getJson(`${base}/api/agents`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie },
+    body: JSON.stringify({ name, ...overrides })
+  });
+  assert.equal(created.status, 201, created.text);
+  return created.body.item;
+}
+
+function saveFeatured(base, cookie, agentIds) {
+  return getJson(`${base}/api/featured-agents`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie },
+    body: JSON.stringify({ agentIds })
+  });
+}
+
+test('热门展示位：首次公开读取未配置，管理员可保存空位和停用案例', async () => {
+  await withEnvironment(async ({ base, center }) => {
+    const initial = await getJson(`${base}/api/featured-agents`);
+    assert.equal(initial.status, 200, initial.text);
+    assert.deepEqual(initial.body, {
+      configured: false,
+      agentIds: [null, null, null],
+      items: [],
+      updatedAt: null
+    });
+
+    const { cookie } = await login({ base, center }, 'admin');
+    const first = await createFeaturedCase(base, cookie, '热门甲');
+    const third = await createFeaturedCase(base, cookie, '热门丙', { status: 'inactive' });
+    const saved = await saveFeatured(base, cookie, [first.id, null, third.id]);
+    assert.equal(saved.status, 200, saved.text);
+    assert.equal(saved.body.configured, true);
+    assert.deepEqual(saved.body.agentIds, [first.id, null, third.id]);
+    assert.deepEqual(saved.body.items.map((item) => [item.id, item.position, item.viewStats]), [
+      [first.id, 1, { viewCount: 0 }],
+      [third.id, 3, { viewCount: 0 }]
+    ]);
+    assert.ok(Number.isInteger(saved.body.updatedAt));
+    assert.deepEqual((await getJson(`${base}/api/featured-agents`)).body, saved.body);
+
+    const empty = await saveFeatured(base, cookie, [null, null, null]);
+    assert.equal(empty.status, 200, empty.text);
+    assert.equal(empty.body.configured, true, '主动清空后仍应关闭旧的自动热门回退');
+    assert.deepEqual(empty.body.agentIds, [null, null, null]);
+    assert.deepEqual(empty.body.items, []);
+  });
+});
+
+test('热门展示位：仅管理员可保存，无效输入和不存在案例均不得覆盖旧配置', async () => {
+  await withEnvironment(async ({ base, center }) => {
+    const admin = await login({ base, center }, 'admin');
+    const student = await login({ base, center }, 'student');
+    const agent = await createFeaturedCase(base, admin.cookie, '保留配置案例');
+    const saved = await saveFeatured(base, admin.cookie, [agent.id, null, null]);
+    assert.equal(saved.status, 200, saved.text);
+
+    assert.equal((await saveFeatured(base, null, [agent.id, null, null])).status, 401);
+    assert.equal((await saveFeatured(base, student.cookie, [agent.id, null, null])).status, 403);
+
+    const invalidValues = [
+      [],
+      [agent.id, null],
+      [agent.id, null, null, null],
+      [agent.id, agent.id, null],
+      ['', null, null],
+      [123, null, null],
+      ['missing-agent', null, null]
+    ];
+    for (const agentIds of invalidValues) {
+      const rejected = await saveFeatured(base, admin.cookie, agentIds);
+      assert.equal(rejected.status, 400, `${JSON.stringify(agentIds)}: ${rejected.text}`);
+      assert.deepEqual((await getJson(`${base}/api/featured-agents`)).body, saved.body);
+    }
+  });
+});
+
+test('热门展示位：置顶排序发生在筛选和分页前，删除案例后对应位置归一为空', async () => {
+  await withEnvironment(async ({ base, center }) => {
+    const { cookie } = await login({ base, center }, 'admin');
+    const cases = [];
+    for (const [index, name] of ['排序甲', '排序乙', '排序丙', '排序丁'].entries()) {
+      cases.push(await createFeaturedCase(base, cookie, name, {
+        discipline: index % 2 === 0 ? '理学' : '工学'
+      }));
+    }
+    const before = await getJson(`${base}/api/agents`);
+    const featuredIds = [cases[0].id, null, cases[3].id];
+    assert.equal((await saveFeatured(base, cookie, featuredIds)).status, 200);
+
+    const after = await getJson(`${base}/api/agents`);
+    const expected = [
+      cases[0].id,
+      cases[3].id,
+      ...before.body.items.map((item) => item.id).filter((id) => !featuredIds.includes(id))
+    ];
+    assert.deepEqual(after.body.items.map((item) => item.id), expected);
+    assert.equal(after.body.total, before.body.total);
+
+    const paged = [];
+    for (const offset of [0, 2]) {
+      const page = await getJson(`${base}/api/agents?limit=2&offset=${offset}`);
+      assert.equal(page.body.total, 4);
+      paged.push(...page.body.items.map((item) => item.id));
+    }
+    assert.deepEqual(paged, expected);
+
+    const filteredBeforeIds = before.body.items
+      .filter((item) => item.discipline === '理学')
+      .map((item) => item.id);
+    const filtered = await getJson(`${base}/api/agents?discipline=${encodeURIComponent('理学')}`);
+    assert.deepEqual(filtered.body.items.map((item) => item.id), [
+      cases[0].id,
+      ...filteredBeforeIds.filter((id) => id !== cases[0].id)
+    ]);
+    assert.equal(filtered.body.total, 2);
+
+    const deleted = await getJson(`${base}/api/agents/${cases[0].id}`, {
+      method: 'DELETE', headers: { cookie }
+    });
+    assert.equal(deleted.status, 200, deleted.text);
+    const normalized = await getJson(`${base}/api/featured-agents`);
+    assert.equal(normalized.body.configured, true);
+    assert.deepEqual(normalized.body.agentIds, [null, null, cases[3].id]);
+    assert.deepEqual(normalized.body.items.map((item) => [item.id, item.position]), [[cases[3].id, 3]]);
+  });
+});
+
 /* ---------------- 全站卡片效果配置 ---------------- */
 
 test('卡片效果：未保存时公开默认配置，支持读取且其他方法返回 405 / Allow', async () => {

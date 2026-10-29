@@ -72,3 +72,10 @@ CREATE TABLE IF NOT EXISTS card_effect_settings (
     data_json  TEXT NOT NULL,
     updated_at BIGINT NOT NULL
 );
+
+-- 6. 手动热门展示位（固定三个位置，单行原子覆盖）
+CREATE TABLE IF NOT EXISTS featured_agent_settings (
+    id         INTEGER PRIMARY KEY CHECK (id = 1),
+    data_json  TEXT NOT NULL,
+    updated_at BIGINT NOT NULL
+);
