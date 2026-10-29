@@ -606,6 +606,37 @@ test('上传中：禁用并阻止提交，上传成功后可提交封面 URL', a
   assert.equal(writes[0].coverImage, '/uploads/new.png');
 });
 
+test('选图上传：图片旁持续显示上传中及成功结果，并回显封面', async () => {
+  const request = deferred();
+  const { get } = page('admin', { fetch: () => request.promise });
+  get('cover-file').files = [image];
+  const pending = get('cover-file').dispatch('change');
+  assert.match(get('cover-status').textContent, /上传中/);
+  assert.match(get('cover-status').textContent, /cover\.png/);
+  request.resolve(uploaded('/uploads/selected.png'));
+  await pending;
+  assert.match(get('cover-status').textContent, /上传成功.*提交/);
+  assert.match(get('cover-preview').innerHTML, /selected\.png/);
+  assert.equal(get('form-submit').disabled, false);
+});
+
+for (const [file, reason] of [
+  [{ ...image, type: 'image/bmp' }, /不支持.*PNG/],
+  [{ ...image, size: 0 }, /内容为空/],
+  [{ ...image, size: 4 * 1024 * 1024 }, /过大.*3 MB/]
+]) {
+  test(`选图上传：${reason.source}在图片旁显示原因，不发送请求`, async () => {
+    let requests = 0;
+    const { get } = page('admin', { fetch: async () => { requests++; } });
+    get('cover-file').files = [file];
+    await get('cover-file').dispatch('change');
+    assert.match(get('cover-status').textContent, reason);
+    assert.equal(get('cover-status').dataset.tone, 'error');
+    assert.equal(requests, 0);
+    assert.equal(get('form-submit').disabled, false);
+  });
+}
+
 test('上传：后选图片覆盖先选，过期响应不改变预览与提交按钮', async () => {
   const requests = [deferred(), deferred()];
   let index = 0;
@@ -678,7 +709,8 @@ for (const failure of ['HTTP', '网络']) {
     assert.equal(get('form-submit').disabled, false);
     assert.equal(get('field-cover').value, '/uploads/existing.png');
     assert.match(get('cover-preview').innerHTML, /existing.png/);
-    assert.equal(get('cover-status').textContent, '上传失败');
+    assert.match(get('cover-status').textContent, failure === 'HTTP' ? /3 MB/ : /无法连接/);
+    assert.equal(get('cover-status').dataset.tone, 'error');
     assert.equal(get('create-notice').dataset.tone, 'error');
   });
 }

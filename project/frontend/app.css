@@ -1616,6 +1616,11 @@ select.input option {
   font-size: 0.72rem;
   color: var(--accent);
   letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+
+.upload-status[data-tone='error'] {
+  color: #ff9b9b;
 }
 
 /* ---- 数据概览（管理端） ---- */

@@ -433,9 +433,11 @@ function setCoverPreview(url) {
   }
 }
 
-function setCoverStatus(text) {
+function setCoverStatus(text, tone = '') {
   const status = $('cover-status');
-  if (status) status.textContent = text ?? '';
+  if (!status) return;
+  status.textContent = text ?? '';
+  status.dataset.tone = tone;
 }
 
 function cancelCoverUpload() {
@@ -473,18 +475,20 @@ async function uploadCover(file) {
 
   // 前置校验（与服务端白名单/上限保持一致，避免无谓请求与难懂的报错）
   if (!COVER_MIME_TYPES.has(file.type)) {
-    setCoverStatus('');
-    setNotice(`不支持的图片格式${file.type ? `（${file.type}）` : ''}，仅支持 PNG / JPG / WebP / GIF。`, 'error');
+    const message = `不支持的图片格式${file.type ? `（${file.type}）` : ''}，仅支持 PNG / JPG / WebP / GIF。`;
+    setCoverStatus(message, 'error');
+    setNotice(message, 'error');
     return;
   }
   if (!file.size) {
-    setCoverStatus('');
+    setCoverStatus('图片内容为空，请重新选择。', 'error');
     setNotice('图片内容为空，请重新选择。', 'error');
     return;
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    setCoverStatus('');
-    setNotice(`图片过大（${(file.size / 1024 / 1024).toFixed(1)} MB），请压缩到 3 MB 以内。`, 'error');
+    const message = `图片过大（${(file.size / 1024 / 1024).toFixed(1)} MB），请压缩到 3 MB 以内。`;
+    setCoverStatus(message, 'error');
+    setNotice(message, 'error');
     return;
   }
 
@@ -493,7 +497,7 @@ async function uploadCover(file) {
   form.append('file', file, file.name || 'cover.png');
   state.uploading = true;
   $('form-submit').disabled = true;
-  setCoverStatus('上传中…');
+  setCoverStatus(`上传中：${file.name || '封面图片'}…`);
   setNotice('封面正在上传…', '');
 
   try {
@@ -515,16 +519,16 @@ async function uploadCover(file) {
         UPLOAD_ERROR_TEXT[response.status] ??
         `封面上传失败（HTTP ${response.status}）。`;
       setNotice(message, 'error');
-      setCoverStatus('上传失败');
+      setCoverStatus(message, 'error');
       return;
     }
     $('field-cover').value = data.url;
     setCoverPreview(data.url);
-    setCoverStatus('已上传');
+    setCoverStatus('上传成功，提交案例后保存。', 'success');
     setNotice(`封面已上传：${data.url}（提交表单后生效）`, 'success');
   } catch {
     if (state.coverUploadRequest !== request) return;
-    setCoverStatus('上传失败');
+    setCoverStatus('无法连接后端服务，封面上传失败。', 'error');
     setNotice('无法连接后端服务，封面上传失败。', 'error');
   } finally {
     if (state.coverUploadRequest === request) {
