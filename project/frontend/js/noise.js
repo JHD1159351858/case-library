@@ -26,12 +26,15 @@ export function createPerlin3D(random = Math.random) {
   }
 
   return function noise3(x, y, z) {
-    const X = Math.floor(x) & 255;
-    const Y = Math.floor(y) & 255;
-    const Z = Math.floor(z) & 255;
-    x -= Math.floor(x);
-    y -= Math.floor(y);
-    z -= Math.floor(z);
+    const floorX = Math.floor(x);
+    const floorY = Math.floor(y);
+    const floorZ = Math.floor(z);
+    const X = floorX & 255;
+    const Y = floorY & 255;
+    const Z = floorZ & 255;
+    x -= floorX;
+    y -= floorY;
+    z -= floorZ;
     const u = fade(x);
     const v = fade(y);
     const w = fade(z);

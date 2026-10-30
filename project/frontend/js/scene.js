@@ -410,10 +410,17 @@ export function createScene({ container, onTimeline }) {
   window.addEventListener('scroll', updateScroll, { passive: true });
 
   // ----- 动画循环 -----
-  let rafId;
+  let rafId = 0;
+  let disposed = false;
   let smoothed = 0;
   let lastColorProgress = -1;
   const clock = { start: performance.now() };
+  const colorMixes = new WeakMap();
+  const projectedPointer = new Vector3();
+  const pointerDirection = new Vector3();
+  const worldPointer = new Vector3();
+  const localPointer = new Vector3();
+  const inactivePointer = new Vector3(-9999, -9999, -9999);
 
   const lerp3 = (target, current, alpha) => current + (target - current) * alpha;
 
@@ -592,6 +599,8 @@ export function createScene({ container, onTimeline }) {
 
   /** 点阵双色插值（原色 → 高亮），用于 figure / bone / skull 的滚动变色 */
   function updatePointColors(geometry, colorsBase, colorsBright, mix) {
+    if (colorMixes.get(geometry) === mix) return;
+    colorMixes.set(geometry, mix);
     const attr = geometry.attributes.color;
     const array = attr.array;
     for (let i = 0; i < array.length; i++) {
@@ -602,6 +611,8 @@ export function createScene({ container, onTimeline }) {
 
   /** 逐帧主循环 — 所有相位数值逐一对应还原基准第 3.4 节 */
   function tick() {
+    rafId = 0;
+    if (disposed || document.hidden) return;
     rafId = requestAnimationFrame(tick);
     const elapsed = (performance.now() - clock.start) / 1000;
     smoothed += (scrollProgress - smoothed) * 0.08;
@@ -613,6 +624,7 @@ export function createScene({ container, onTimeline }) {
     let faceOpacity = 0;
     if (t < 0.26) faceOpacity = 0.9 * (1 - Math.min(1, Math.max(0, (t - 0.1) / 0.14)));
     faceMaterial.opacity = faceOpacity;
+    facePoints.visible = faceOpacity > 0;
 
     // —— 人形点阵相位 ——
     let synOpacity = 0;
@@ -641,6 +653,7 @@ export function createScene({ container, onTimeline }) {
     figureMaterial.opacity = figOpacity;
     figureSynMaterial.opacity = synOpacity;
     figureLineMaterial.opacity = 0.55 * synOpacity;
+    figureGroup.visible = figOpacity > 0 || synOpacity > 0;
 
     // —— 骨架相位 ——
     let boneSynOpacity = 0;
@@ -669,6 +682,7 @@ export function createScene({ container, onTimeline }) {
     boneMaterial.opacity = boneOpacity;
     boneSynMaterial.opacity = boneSynOpacity;
     boneLineMaterial.opacity = 0.55 * boneSynOpacity;
+    boneGroup.visible = boneOpacity > 0 || boneSynOpacity > 0;
 
     // —— 头骨相位 ——
     let skullSynOpacity = 0;
@@ -688,6 +702,7 @@ export function createScene({ container, onTimeline }) {
     skullMaterial.opacity = skullOpacity;
     skullSynMaterial.opacity = skullSynOpacity;
     skullLineMaterial.opacity = 0.55 * skullSynOpacity;
+    skullGroup.visible = skullOpacity > 0 || skullSynOpacity > 0;
 
     // —— 星云：常亮 + 缓慢自转 + 进度变色 ——
     nebulaPoints.rotation.y += 0.001;
@@ -742,50 +757,50 @@ export function createScene({ container, onTimeline }) {
 
     // —— 光标世界坐标（投影到 z=相机前方平面） ——
     if (pointerActive) {
-      const ndc = new Vector3(pointerNDC.x, pointerNDC.y, 0.5);
+      const ndc = projectedPointer.set(pointerNDC.x, pointerNDC.y, 0.5);
       ndc.unproject(camera);
-      const dir = ndc.sub(camera.position).normalize();
+      const dir = pointerDirection.copy(ndc).sub(camera.position).normalize();
       const distance = -camera.position.z / dir.z;
-      const worldPoint = camera.position.clone().add(dir.multiplyScalar(distance));
+      const worldPoint = worldPointer.copy(camera.position).add(dir.multiplyScalar(distance));
       raycasterPoint.lerp(worldPoint, 0.1);
     } else {
-      raycasterPoint.lerp(new Vector3(-9999, -9999, -9999), 0.1);
+      raycasterPoint.lerp(inactivePointer, 0.1);
     }
 
     // —— 鼠标扰动（逐系统，仅活跃时计算） ——
     if (faceOpacity > 0.01) {
-      const local = new Vector3().copy(raycasterPoint);
+      const local = localPointer.copy(raycasterPoint);
       facePoints.worldToLocal(local);
       applyPointerForce(faceGeometry.attributes.position, faceOrigins, faceOffsets, faceData.pointCount, local, elapsed);
     }
     if (figOpacity > 0.01) {
-      const local = new Vector3().copy(raycasterPoint);
+      const local = localPointer.copy(raycasterPoint);
       figurePoints.worldToLocal(local);
       applyPointerForce(figureGeometry.attributes.position, figureOrigins, figureOffsets, figureData.totalPoints, local, elapsed);
-      const synLocal = new Vector3().copy(raycasterPoint);
+      const synLocal = localPointer.copy(raycasterPoint);
       figureSynPoints.worldToLocal(synLocal);
       applySynapseForce(figureSyn.synapses, figureSynGeometry, figureLineGeometry, figureSyn.pairs, synLocal, elapsed);
     }
     if (boneOpacity > 0.01) {
-      const local = new Vector3().copy(raycasterPoint);
+      const local = localPointer.copy(raycasterPoint);
       bonePoints.worldToLocal(local);
       applyPointerForce(boneGeometry.attributes.position, boneOrigins, boneOffsets, boneData.totalPoints, local, elapsed);
-      const synLocal = new Vector3().copy(raycasterPoint);
+      const synLocal = localPointer.copy(raycasterPoint);
       boneSynPoints.worldToLocal(synLocal);
       applySynapseForce(boneSyn.synapses, boneSynGeometry, boneLineGeometry, boneSyn.pairs, synLocal, elapsed);
     }
     if (skullOpacity > 0.01) {
-      const local = new Vector3().copy(raycasterPoint);
+      const local = localPointer.copy(raycasterPoint);
       skullPoints.worldToLocal(local);
       applyPointerForce(skullGeometry.attributes.position, skullOrigins, skullOffsets, skullData.totalPoints, local, elapsed);
-      const synLocal = new Vector3().copy(raycasterPoint);
+      const synLocal = localPointer.copy(raycasterPoint);
       skullSynPoints.worldToLocal(synLocal);
       applySynapseForce(skullSyn.synapses, skullSynGeometry, skullLineGeometry, skullSyn.pairs, synLocal, elapsed);
     }
 
     // —— 星云常时更新 ——
     {
-      const local = new Vector3().copy(raycasterPoint);
+      const local = localPointer.copy(raycasterPoint);
       nebulaPoints.worldToLocal(local);
       applyNebula(elapsed, t, local);
     }
@@ -796,6 +811,16 @@ export function createScene({ container, onTimeline }) {
     composer.render();
   }
 
+  function syncVisibility() {
+    if (document.hidden) {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+    } else if (!disposed && !rafId) {
+      updateScroll();
+      tick();
+    }
+  }
+  document.addEventListener('visibilitychange', syncVisibility);
   tick();
 
   // ----- 自适应 -----
@@ -815,7 +840,9 @@ export function createScene({ container, onTimeline }) {
 
   // ----- 销毁 -----
   function dispose() {
+    disposed = true;
     cancelAnimationFrame(rafId);
+    document.removeEventListener('visibilitychange', syncVisibility);
     resizeObserver.disconnect();
     window.removeEventListener('mousemove', onMouseMove);
     window.removeEventListener('scroll', updateScroll);
