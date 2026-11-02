@@ -54,6 +54,7 @@ function page(name, overrides = {}) {
   runInContext(code + '\nglobalThis.api = { state, renderDetailBody, openDetail, closeDetail' +
     (name === 'admin' ? ', uploadCover, resetForm, fillForm, startEdit, submitForm' : ', selectPopularAgents, loadPopularAgents, loadAgents, loadCardEffects, renderCard, renderGrid, bindSearch, bindFilters, bindPagination, renderPagination') + ' };', context);
   runInContext('Object.assign(api, { loadFeaturedAgents: typeof loadFeaturedAgents === "function" ? loadFeaturedAgents : undefined, loadFeaturedSettings: typeof loadFeaturedSettings === "function" ? loadFeaturedSettings : undefined, initFeaturedSettings: typeof initFeaturedSettings === "function" ? initFeaturedSettings : undefined, saveFeaturedSettings: typeof saveFeaturedSettings === "function" ? saveFeaturedSettings : undefined });', context);
+  runInContext('Object.assign(api, { loadSiteStats: typeof loadSiteStats === "function" ? loadSiteStats : undefined });', context);
   if (name === 'admin') runInContext('renderRows = () => {}; loadAgents = async () => {}; loadStats = async () => {};', context);
   if (name === 'admin') runInContext('Object.assign(api, { renderViewCell: typeof renderViewCell === "function" ? renderViewCell : undefined, openViews: typeof openViews === "function" ? openViews : undefined });', context);
   if (name === 'admin') {
@@ -210,6 +211,49 @@ test('置顶后台：未保存选择跨读取失败和后续成功刷新仍保�
   assert.equal(get('featured-slot-1').value, 'a');
   assert.equal(get('featured-save').disabled, false);
   assert.match(get('featured-notice').textContent, /保留|未保存/);
+});
+
+test('全站访问人数：管理员可读取 0 和正常累计值', async () => {
+  for (const visitorCount of [0, 37]) {
+    const { api, get } = page('admin', { fetchJson: async (url) => {
+      assert.equal(url, '/api/site-visits');
+      return { ok: true, data: { visitorCount } };
+    } });
+    await api.loadSiteStats();
+    assert.equal(get('stat-visitors').textContent, String(visitorCount));
+    assert.equal(get('stat-visitors-status').textContent, '');
+  }
+});
+
+test('全站访问人数：请求失败保留占位符并提示刷新重试', async () => {
+  const { api, get } = page('admin', { fetchJson: async () => ({ ok: false, status: 500, data: null }) });
+  get('stat-visitors').textContent = '99';
+  await api.loadSiteStats();
+  assert.equal(get('stat-visitors').textContent, '—');
+  assert.match(get('stat-visitors-status').textContent, /加载失败.*刷新全部重试/);
+});
+
+test('全站访问人数：非管理员不请求统计接口', async () => {
+  let requests = 0;
+  const { api } = page('admin', { fetchJson: async () => {
+    requests++;
+    return { ok: true, data: { visitorCount: 8 } };
+  } });
+  api.state.session.user = { ssoUid: 'student', isAdmin: false };
+  await api.loadSiteStats();
+  assert.equal(requests, 0);
+});
+
+test('全站访问人数：刷新全部会重新加载访问人数', async () => {
+  const calls = [];
+  const { get } = page('admin', { fetchJson: async (url) => {
+    calls.push(url);
+    if (url === '/api/site-visits') return { ok: true, data: { visitorCount: 12 } };
+    return { ok: true, data: { configured: false, agentIds: [null, null, null], items: [], updatedAt: null } };
+  } });
+  await get('refresh-all').dispatch('click');
+  assert.ok(calls.includes('/api/site-visits'));
+  assert.equal(get('stat-visitors').textContent, '12');
 });
 
 function paginationItems(total = 13) {

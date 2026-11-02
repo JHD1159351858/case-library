@@ -345,6 +345,20 @@ export async function createPgStorage(options) {
     await client.query('DELETE FROM uploaded_images WHERE file_name = $1', [fileName]);
   }
 
+  /* ------------------------------ 全站访问人数 ------------------------------ */
+
+  function recordSiteVisit({ visitorKey, timestamp = now() }) {
+    return client.query(`
+      INSERT INTO site_visitors (visitor_key, first_visited_at) VALUES ($1, $2)
+      ON CONFLICT (visitor_key) DO NOTHING
+    `, [visitorKey, timestamp]);
+  }
+
+  async function siteVisitStats() {
+    const result = await client.query('SELECT COUNT(*)::int AS "visitorCount" FROM site_visitors');
+    return { visitorCount: Number(result.rows[0].visitorCount) };
+  }
+
   /* ------------------------------ 手动热门展示位 ------------------------------ */
 
   async function featuredAgentSettings() {
@@ -469,6 +483,8 @@ export async function createPgStorage(options) {
     saveUpload,
     findUpload,
     deleteUpload,
+    recordSiteVisit,
+    siteVisitStats,
     featuredAgentSettings,
     saveFeaturedAgentSettings,
     recordAgentView,

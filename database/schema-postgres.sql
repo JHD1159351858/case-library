@@ -87,3 +87,9 @@ CREATE TABLE IF NOT EXISTS uploaded_images (
     data         BYTEA NOT NULL,
     created_at   BIGINT NOT NULL
 );
+
+-- 8. 全站累计独立访客（按浏览器访客键去重）
+CREATE TABLE IF NOT EXISTS site_visitors (
+    visitor_key      TEXT PRIMARY KEY,
+    first_visited_at BIGINT NOT NULL
+);

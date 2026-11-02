@@ -197,6 +197,11 @@ export function createDatabase({ databasePath, now = Date.now }) {
     saveUpload: database.prepare('INSERT INTO uploaded_images (file_name, content_type, data, created_at) VALUES (?, ?, ?, ?)'),
     findUpload: database.prepare('SELECT file_name, content_type, data, created_at FROM uploaded_images WHERE file_name = ?'),
     deleteUpload: database.prepare('DELETE FROM uploaded_images WHERE file_name = ?'),
+    recordSiteVisit: database.prepare(`
+      INSERT INTO site_visitors (visitor_key, first_visited_at) VALUES (?, ?)
+      ON CONFLICT(visitor_key) DO NOTHING
+    `),
+    siteVisitStats: database.prepare('SELECT COUNT(*) AS visitorCount FROM site_visitors'),
     featuredAgentSettings: database.prepare('SELECT data_json, updated_at FROM featured_agent_settings WHERE id = 1'),
     saveFeaturedAgentSettings: database.prepare(`
       INSERT INTO featured_agent_settings (id, data_json, updated_at) VALUES (1, ?, ?)
@@ -388,6 +393,14 @@ export function createDatabase({ databasePath, now = Date.now }) {
 
     deleteUpload(fileName) {
       statements.deleteUpload.run(fileName);
+    },
+
+    recordSiteVisit({ visitorKey, timestamp = now() }) {
+      statements.recordSiteVisit.run(visitorKey, timestamp);
+    },
+
+    siteVisitStats() {
+      return { ...statements.siteVisitStats.get() };
     },
 
     featuredAgentSettings() {

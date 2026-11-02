@@ -165,6 +165,25 @@ async function loadStats() {
   renderStats();
 }
 
+async function loadSiteStats() {
+  if (!state.session.user?.isAdmin) return;
+  const value = $('stat-visitors');
+  const status = $('stat-visitors-status');
+  if (value) value.textContent = '—';
+  if (status) status.textContent = '正在加载…';
+
+  try {
+    const { ok, data } = await fetchJson('/api/site-visits');
+    const visitorCount = data?.visitorCount;
+    if (!ok || !Number.isInteger(visitorCount) || visitorCount < 0) throw new Error('invalid_site_stats');
+    if (value) value.textContent = String(visitorCount);
+    if (status) status.textContent = '';
+  } catch {
+    if (value) value.textContent = '—';
+    if (status) status.textContent = '访问统计加载失败，请点击刷新全部重试';
+  }
+}
+
 /* ---------------- 记录列表 ---------------- */
 
 function renderCoverCell(agent) {
@@ -1103,7 +1122,7 @@ $('refresh-all')?.addEventListener('click', async () => {
   await Promise.all([
     loadAgents(),
     loadStats(),
-    ...(state.session.user?.isAdmin ? [loadFeaturedSettings()] : [])
+    ...(state.session.user?.isAdmin ? [loadFeaturedSettings(), loadSiteStats()] : [])
   ]);
   toast('已刷新');
 });
@@ -1147,7 +1166,11 @@ $('cover-file')?.addEventListener('change', async (event) => {
 
 await refreshSession();
 if (state.session.user?.isAdmin) initCardEffects({ isAdmin: () => Boolean(state.session.user?.isAdmin) });
-await Promise.all([loadAgents(), loadStats()]);
+await Promise.all([
+  loadAgents(),
+  loadStats(),
+  ...(state.session.user?.isAdmin ? [loadSiteStats()] : [])
+]);
 if (state.session.user?.isAdmin) await initFeaturedSettings();
 
 // 登录 / 退出回调提示（login=ok / logout=1 / login_error=xx）

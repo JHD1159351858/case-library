@@ -930,6 +930,73 @@ async function createViewCase({ base, center }) {
   return { agent: created.body.item, adminCookie: cookie };
 }
 
+test('网站访问：累计人数仅管理员可见，浏览器去重并包含未登录访客', async () => {
+  await withEnvironment(async ({ base, center }) => {
+    const url = `${base}/api/site-visits`;
+    const admin = await login({ base, center }, 'admin');
+    const student = await login({ base, center }, 'student');
+    const stats = () => getJson(url, { headers: { cookie: admin.cookie } });
+    assert.equal((await getJson(url)).status, 401);
+    assert.equal((await getJson(url, { headers: { cookie: student.cookie } })).status, 403);
+    assert.deepEqual((await stats()).body, { visitorCount: 0 });
+
+    const first = await getJson(url, { method: 'POST' });
+    assert.equal(first.status, 200);
+    assert.deepEqual(first.body, { ok: true, recorded: true });
+    const browser = visitorCookie(first);
+    assert.ok(browser);
+    assert.ok(first.setCookies.some((value) => value.includes('HttpOnly') && value.includes('SameSite=Lax')));
+    await getJson(url, { method: 'POST', headers: { cookie: browser } });
+    await getJson(url, { method: 'POST', headers: { cookie: `${student.cookie}; ${browser}` } });
+    assert.deepEqual((await stats()).body, { visitorCount: 1 }, '刷新、不同页面和登录状态变化不重复增加同一浏览器人数');
+
+    const second = await getJson(url, { method: 'POST', headers: { 'x-forwarded-proto': 'https' } });
+    assert.notEqual(visitorCookie(second), browser);
+    assert.ok(second.setCookies.some((value) => value.includes('Secure')));
+    assert.deepEqual((await stats()).body, { visitorCount: 2 });
+    const administratorVisit = await getJson(url, { method: 'POST', headers: { cookie: admin.cookie } });
+    assert.deepEqual(administratorVisit.body, { ok: true, recorded: false });
+    assert.ok(!administratorVisit.setCookies.some((value) => value.startsWith('agent_site_visitor=')));
+    assert.deepEqual((await stats()).body, { visitorCount: 2 });
+  });
+});
+
+test('网站访问：跨站上报被拒绝，客户端身份字段无效，Cookie 不返回到统计数据', async () => {
+  await withEnvironment(async ({ base, center }) => {
+    const url = `${base}/api/site-visits`;
+    const { cookie } = await login({ base, center }, 'admin');
+    for (const headers of [{ origin: 'https://other.example' }, { 'sec-fetch-site': 'cross-site' }, { 'sec-fetch-site': 'same-site' }]) {
+      assert.equal((await getJson(url, { method: 'POST', headers })).status, 403);
+    }
+    assert.deepEqual((await getJson(url, { headers: { cookie } })).body, { visitorCount: 0 });
+    const recorded = await getJson(url, {
+      method: 'POST', headers: { origin: base, 'sec-fetch-site': 'same-origin', 'content-type': 'application/json', cookie: 'agent_site_visitor=invalid' },
+      body: JSON.stringify({ visitorKey: 'spoofed-browser', isAdmin: true })
+    });
+    assert.equal(recorded.status, 200);
+    assert.ok(visitorCookie(recorded));
+    const result = await getJson(url, { headers: { cookie } });
+    assert.deepEqual(result.body, { visitorCount: 1 });
+    assert.ok(!result.text.includes('spoofed-browser') && !result.text.includes(visitorCookie(recorded).split('=')[1]));
+    const unsupported = await getJson(url, { method: 'DELETE', headers: { cookie } });
+    assert.equal(unsupported.status, 405);
+    assert.equal(unsupported.headers.allow, 'GET, POST');
+  });
+});
+
+test('网站访问：各公开入口加载统计模块，管理端和静态资源不直接记账', async () => {
+  await withEnvironment(async ({ base, site }) => {
+    for (const path of ['/', '/agents.html', '/ocean/index.html', '/ocean/real/index.html']) {
+      const page = await request(`${base}${path}`);
+      assert.equal(page.status, 200);
+      assert.match(page.text, /<script type="module" src="\/js\/site-visits\.js"><\/script>/);
+    }
+    assert.ok(!(await request(`${base}/admin.html`)).text.includes('/js/site-visits.js'));
+    assert.equal((await request(`${base}/favicon.svg`)).status, 200);
+    assert.deepEqual(site.db.siteVisitStats(), { visitorCount: 0 });
+  });
+});
+
 function recordView(base, id, { cookie, headers = {}, body = '{}' } = {}) {
   return getJson(`${base}/api/agents/${id}/views`, {
     method: 'POST',

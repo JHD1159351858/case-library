@@ -1656,7 +1656,7 @@ select.input option {
 
 @media (min-width: 860px) {
   .stats-grid {
-    grid-template-columns: 10rem minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: 10rem 10rem minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 

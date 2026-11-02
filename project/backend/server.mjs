@@ -1009,6 +1009,33 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     return sendJson(response, 200, await db.agentStats());
   }
 
+  async function handleSiteVisitStats(request, response) {
+    const user = await currentUser(request);
+    if (!user) return sendJson(response, 401, { error: 'authentication_required' });
+    if (!computeIsAdmin(user, config)) return sendJson(response, 403, { error: 'admin_required' });
+    return sendJson(response, 200, await db.siteVisitStats());
+  }
+
+  /** 全站人数按浏览器去重，不接收客户端身份，也不累加页面刷新次数。 */
+  async function handleRecordSiteVisit(request, response) {
+    request.resume();
+    const origin = request.headers.origin;
+    const fetchSite = String(request.headers['sec-fetch-site'] ?? '').toLowerCase();
+    if ((origin !== undefined && safeOrigin(origin) !== safeOrigin(publicBase(request)))
+      || fetchSite === 'cross-site' || fetchSite === 'same-site') {
+      return sendJson(response, 403, { error: 'cross_origin_forbidden' });
+    }
+    const user = await currentUser(request);
+    if (user && computeIsAdmin(user, config)) return sendJson(response, 200, { ok: true, recorded: false });
+    let token = cookieValue(request, VISITOR_COOKIE_NAME);
+    if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
+      token = generateToken();
+      response.setHeader('Set-Cookie', serializeVisitorCookie(token, { secure: isSecureRequest(request) }));
+    }
+    await db.recordSiteVisit({ visitorKey: `a:${hashToken(token)}`, timestamp: now() });
+    return sendJson(response, 200, { ok: true, recorded: true });
+  }
+
   async function handleAgentDetail(request, response, agentId) {
     const row = await db.findAgentById(agentId);
     if (!row) return sendJson(response, 404, { error: 'agent_not_found' });
@@ -1337,6 +1364,12 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
       if (pathname === '/api/featured-agents') {
         if (method === 'GET') return await handleFeaturedAgents(request, response);
         if (method === 'POST') return await handleSaveFeaturedAgents(request, response);
+        response.setHeader('Allow', 'GET, POST');
+        return sendJson(response, 405, { error: 'method_not_allowed' });
+      }
+      if (pathname === '/api/site-visits') {
+        if (method === 'GET') return await handleSiteVisitStats(request, response);
+        if (method === 'POST') return await handleRecordSiteVisit(request, response);
         response.setHeader('Allow', 'GET, POST');
         return sendJson(response, 405, { error: 'method_not_allowed' });
       }

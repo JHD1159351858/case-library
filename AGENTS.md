@@ -49,6 +49,7 @@ agent-official-website（case-library）：智能体官网，暗黑科幻风滚�
 - `GET /api/agents`（匿名读）、`POST /api/agents`（管理员，未授权 401 为预期行为）
 - `GET /api/agents/stats`、`POST /api/agents/chat`、`GET /api/card-effects`、`POST /api/uploads`（管理员）
 - `GET /api/featured-agents`（匿名读）、`POST /api/featured-agents`（管理员）：保存三个现有热门 TOP 展示位，配置持久化到当前数据库
+- `POST /api/site-visits`（公开页面上报）、`GET /api/site-visits`（管理员）：全站累计人数按浏览器 Cookie 去重，排除已登录管理员，数据保存在 `site_visitors` 表
 
 ## 代码风格与注意事项
 - 全项目零 npm 依赖，禁止引入包管理器；标点半角，ES Modules

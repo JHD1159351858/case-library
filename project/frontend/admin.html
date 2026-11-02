@@ -55,6 +55,10 @@
             <div class="stat-value mono" id="stat-total">—</div>
             <div class="stat-label">记录总数</div>
           </div>
+          <div class="stat-card stat-card-total">
+            <div class="stat-value mono" id="stat-visitors">—</div>
+            <div class="stat-label">累计访问人数</div>
+          </div>
           <div class="stat-card">
             <div class="stat-title">学科分布</div>
             <div class="chip-list" id="stat-disciplines"><span class="muted">加载中…</span></div>
@@ -64,6 +68,8 @@
             <div class="chip-list" id="stat-schools"><span class="muted">加载中…</span></div>
           </div>
         </div>
+        <p class="field-hint">按浏览器去重，包含未登录访客；已登录管理员不计入，从功能启用后累计。</p>
+        <p class="field-hint" id="stat-visitors-status" role="status">正在加载…</p>
       </section>
 
       <section class="panel featured-settings-panel">

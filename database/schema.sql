@@ -122,3 +122,9 @@ CREATE TABLE IF NOT EXISTS uploaded_images (
   data         BLOB NOT NULL,
   created_at   INTEGER NOT NULL
 ) STRICT;
+
+-- 全站累计独立访客：仅保存浏览器访客键与首次访问时间。
+CREATE TABLE IF NOT EXISTS site_visitors (
+  visitor_key      TEXT PRIMARY KEY,
+  first_visited_at INTEGER NOT NULL
+) STRICT;
