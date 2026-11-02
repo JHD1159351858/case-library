@@ -12,6 +12,7 @@
  */
 import { consumeAuthNotice, escapeHtml, fetchJson, formatTime, loadSession, parseTags, renderAgentLink, renderSessionChip, resolveAgentLink, toast } from './session.js';
 import { initCardEffects } from './card-effects-admin.js';
+import { initSsoWhitelists } from './sso-whitelists.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -1165,7 +1166,10 @@ $('cover-file')?.addEventListener('change', async (event) => {
 });
 
 await refreshSession();
-if (state.session.user?.isAdmin) initCardEffects({ isAdmin: () => Boolean(state.session.user?.isAdmin) });
+if (state.session.user?.isAdmin) {
+  initCardEffects({ isAdmin: () => Boolean(state.session.user?.isAdmin) });
+  void initSsoWhitelists({ root: $('sso-whitelists-panel'), user: state.session.user });
+}
 await Promise.all([
   loadAgents(),
   loadStats(),

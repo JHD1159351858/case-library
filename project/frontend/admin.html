@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="app.css" />
   <link rel="stylesheet" href="desktop-layout.css" />
   <link rel="stylesheet" href="admin-theme.css" />
+  <link rel="stylesheet" href="sso-whitelists.css" />
 </head>
 <body>
   <header class="app-topbar">
@@ -98,6 +99,14 @@
           <div class="notice" id="featured-notice" role="status" aria-live="polite">正在读取当前热门展示配置…</div>
         </form>
       </section>
+
+      <details class="panel sso-whitelists-panel" id="sso-whitelists-panel">
+        <summary>
+          <span>认证中心共享白名单</span>
+          <span class="sso-whitelists-summary-note">机构 FID 与回跳域名</span>
+        </summary>
+        <p class="sso-whitelists-warning">此名单由认证中心共享，会影响认证中心的所有接入项目，而不只影响当前案例库。</p>
+      </details>
 
       <div class="admin-grid">
         <!-- 现有记录 -->

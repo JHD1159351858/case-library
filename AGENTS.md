@@ -30,6 +30,8 @@ agent-official-website（case-library）：智能体官网，暗黑科幻风滚�
 - `prod.env`（根目录，不入 git）：**生产配置文件，随部署包上传**（部署打包器排除 `.env` 但不排除它）。生产数据库/SSO/管理员配置写在这里；平台注入的同名环境变量优先于它。含数据库密码，已加入 .gitignore 防止误提交
 - `SSO_CENTER_URL` / `SSO_SHARED_SECRET`：超星认证中心；未配置真实值时登录不可用，其余功能正常
 - `ADMIN_ROLES` / `ADMIN_SSO_UIDS`：管理员判定（角色名大小写不敏感 + uid 白名单兜底，改完重启生效）
+- `SSO_WHITELIST_ADMIN_TOKEN`：认证中心白名单的独立管理密钥（两端一致，至少32位可打印ASCII，不能复用原登录验票密钥）；仅服务端使用。
+- `SSO_WHITELIST_ADMIN_UIDS`：可管理认证中心名单的超星UID，逗号分隔；须同时具备本站管理员权限，留空拒绝所有人。配套中心更新与部署见 `doc/sso-whitelist-management.md`。
 - `DATABASE_URL`：PostgreSQL 连接串（生产持久化首选）。配置后走 PG，`DB_PATH` 被忽略；**生产环境通过平台环境变量/Secret 注入，不要写入仓库或沙箱 `.env`**。连接串必须带 `sslmode=require&channel_binding=require`
 - `DB_PATH`：SQLite 文件路径（仅未配置 `DATABASE_URL` 时使用），默认 `database/agent-website.db`。生产环境（veFaaS）目录只读：`start-cloud.mjs` 在 `COZE_PROJECT_ENV=PROD` 且**未配置 PG** 时把相对 `DB_PATH`/`UPLOADS_DIR` 重定向到 `/tmp/agent-website/`（临时目录，重启数据丢失，仅兜底）；配置了 PG 则不重定向 DB_PATH
 - 新上传封面的图片本体保存在 `uploaded_images` 表（PostgreSQL BYTEA / SQLite BLOB），保持 `/uploads/文件名` 地址。配置持久化 PostgreSQL 后，图片可跨实例读取并在重新部署后保留；SQLite 则随数据库文件一起保留或丢失。
@@ -50,6 +52,7 @@ agent-official-website（case-library）：智能体官网，暗黑科幻风滚�
 - `GET /api/agents/stats`、`POST /api/agents/chat`、`GET /api/card-effects`、`POST /api/uploads`（管理员）
 - `GET /api/featured-agents`（匿名读）、`POST /api/featured-agents`（管理员）：保存三个现有热门 TOP 展示位，配置持久化到当前数据库
 - `POST /api/site-visits`（公开页面上报）、`GET /api/site-visits`（管理员）：全站累计人数按浏览器 Cookie 去重，排除已登录管理员，数据保存在 `site_visitors` 表
+- `GET/POST /api/sso-whitelists`：仅指定超星UID的管理员通过本站后端管理认证中心共享机构与回跳域名名单；不在案例库数据库复制名单。
 
 ## 代码风格与注意事项
 - 全项目零 npm 依赖，禁止引入包管理器；标点半角，ES Modules

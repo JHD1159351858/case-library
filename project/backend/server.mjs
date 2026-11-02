@@ -21,6 +21,7 @@
  *   - 会话 Cookie HttpOnly + SameSite=Lax，数据库只存 token 的 sha256 摘要
  */
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createSsoWhitelistClient, SsoWhitelistError } from './sso-whitelists.mjs';
 import { createReadStream, existsSync, statSync, unlinkSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, resolve, sep } from 'node:path';
@@ -91,6 +92,8 @@ export function parseEnvConfig(environment = process.env, overrides = {}) {
 
   const adminRoles = splitList(pick('adminRoles', environment.ADMIN_ROLES ?? 'admin')).map((role) => role.toLowerCase());
   const adminSsoUids = splitList(pick('adminSsoUids', environment.ADMIN_SSO_UIDS ?? ''));
+  const ssoWhitelistAdminToken = String(pick('ssoWhitelistAdminToken', environment.SSO_WHITELIST_ADMIN_TOKEN ?? '')).trim();
+  const ssoWhitelistAdminUids = splitList(pick('ssoWhitelistAdminUids', environment.SSO_WHITELIST_ADMIN_UIDS ?? ''));
 
   const root = projectRoot();
   const dbPath = resolve(root, String(pick('dbPath', environment.DB_PATH ?? join('database', 'agent-website.db'))));
@@ -107,6 +110,8 @@ export function parseEnvConfig(environment = process.env, overrides = {}) {
     allowedReturnOrigins: allowedOrigins,
     adminRoles: adminRoles.length ? adminRoles : ['admin'],
     adminSsoUids,
+    ssoWhitelistAdminToken,
+    ssoWhitelistAdminUids,
     dbPath,
     frontendDir,
     uploadsDir
@@ -1009,6 +1014,40 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     return sendJson(response, 200, await db.agentStats());
   }
 
+  async function handleSsoWhitelists(request, response) {
+    const user = await currentUser(request);
+    if (!user) return sendJson(response, 401, { error: 'authentication_required' });
+    if (!computeIsAdmin(user, config) || !config.ssoWhitelistAdminUids?.includes(user.sso_uid)) {
+      return sendJson(response, 403, { error: 'sso_whitelist_forbidden' });
+    }
+    if (request.method === 'POST') {
+      const origin = request.headers.origin;
+      const fetchSite = String(request.headers['sec-fetch-site'] ?? '').toLowerCase();
+      if ((origin !== undefined && safeOrigin(origin) !== safeOrigin(publicBase(request)))
+        || fetchSite === 'cross-site' || fetchSite === 'same-site') {
+        request.resume();
+        return sendJson(response, 403, { error: 'cross_origin_forbidden' });
+      }
+      if (String(request.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase() !== 'application/json') {
+        request.resume();
+        return sendJson(response, 400, { error: 'sso_whitelist_invalid_input' });
+      }
+    }
+    try {
+      if (config.ssoWhitelistAdminToken && config.ssoWhitelistAdminToken === config.ssoSharedSecret) {
+        return sendJson(response, 503, { error: 'sso_whitelist_not_configured' });
+      }
+      const client = createSsoWhitelistClient({ centerUrl: config.ssoCenterUrl, token: config.ssoWhitelistAdminToken, fetchImpl });
+      if (request.method === 'GET') return sendJson(response, 200, await client.read(user.sso_uid));
+      const body = await readAgentPayload(request, response);
+      if (!body) return;
+      return sendJson(response, 200, await client.write(body, user.sso_uid));
+    } catch (error) {
+      if (error instanceof SsoWhitelistError) return sendJson(response, error.status, { error: error.code });
+      throw error;
+    }
+  }
+
   async function handleSiteVisitStats(request, response) {
     const user = await currentUser(request);
     if (!user) return sendJson(response, 401, { error: 'authentication_required' });
@@ -1364,6 +1403,11 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
       if (pathname === '/api/featured-agents') {
         if (method === 'GET') return await handleFeaturedAgents(request, response);
         if (method === 'POST') return await handleSaveFeaturedAgents(request, response);
+        response.setHeader('Allow', 'GET, POST');
+        return sendJson(response, 405, { error: 'method_not_allowed' });
+      }
+      if (pathname === '/api/sso-whitelists') {
+        if (method === 'GET' || method === 'POST') return await handleSsoWhitelists(request, response);
         response.setHeader('Allow', 'GET, POST');
         return sendJson(response, 405, { error: 'method_not_allowed' });
       }

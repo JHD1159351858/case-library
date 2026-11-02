@@ -1,0 +1,266 @@
+diff --git a/.env.example b/.env.example
+index b9901a5..0e87e97 100644
+--- a/.env.example
++++ b/.env.example
+@@ -13,0 +14,2 @@ SSO_SHARED_SECRET=
++# 案例库服务端管理机构/回跳白名单的独立 ASCII 令牌（至少 32 字符，推荐 64 位十六进制；不得与 SSO_SHARED_SECRET / ADMIN_PASSWORD / ADMIN_SESSION_SECRET 相同）
++SSO_WHITELIST_ADMIN_TOKEN=
+@@ -41 +43 @@ ADMIN_PASSWORD=
+-ADMIN_SESSION_SECRET=
+\ No newline at end of file
++ADMIN_SESSION_SECRET=
+diff --git a/README.md b/README.md
+index 93eead7..73ac2b0 100644
+--- a/README.md
++++ b/README.md
+@@ -17,0 +18 @@
++- 案例库白名单管理集成：`SSO_WHITELIST_ADMIN_TOKEN`（独立 ASCII 服务端令牌，至少 32 字符，推荐 64 位十六进制；不得与 `SSO_SHARED_SECRET`、`ADMIN_PASSWORD` 或 `ADMIN_SESSION_SECRET` 相同）
+@@ -60,2 +61,8 @@ bash ./scripts/dev.sh
+-- 鉴权：所有 `/admin` 页面与 `/api/admin/*` 接口均须管理员会话，未登录访问页面 302 到登录页、调 API 返回 401
+-- 增删改启停即时生效（写后清缓存），无需重新部署
+\ No newline at end of file
++- 鉴权：所有 `/admin` 页面与 `/api/admin/*` 接口默认须管理员会话，未登录访问页面 302 到登录页、调 API 返回 401
++- 仅机构和回跳域名的四个白名单路由额外接受案例库服务端 Bearer 令牌，并要求 `X-Case-Library-Actor`；审计 actor 记为 `case-library:<真实 SSO UID>`。其他管理接口不接受该令牌
++- 增删改启停即时生效（写后清缓存），无需重新部署
++
++案例库服务端集成时，双方配置相同的 `SSO_WHITELIST_ADMIN_TOKEN`，请求携带
++`Authorization: Bearer <token>` 和 `X-Case-Library-Actor: <encodeURIComponent(真实 SSO UID)>`。令牌只适用于
++`/api/admin/fids`、`/api/admin/fids/[fid]`、`/api/admin/origins`、
++`/api/admin/origins/action`；不得用于密码、用户、审计读取或其他管理接口。
+diff --git a/src/lib/admin-api.ts b/src/lib/admin-api.ts
+index 982ed88..d2f1bfb 100644
+--- a/src/lib/admin-api.ts
++++ b/src/lib/admin-api.ts
+@@ -4,0 +5 @@ import { query } from '@/lib/db';
++import { authenticateWhitelistAdminToken } from './whitelist-admin-token';
+@@ -14,0 +16,16 @@ export function requireAdminOr401(request: NextRequest): string | null {
++/** 白名单接口额外支持案例库服务端令牌；其他管理接口仍只认管理员会话。 */
++export function requireWhitelistAdminOr401(request: NextRequest): string | null {
++  const username = requireAdminOr401(request);
++  if (username) return username;
++  return authenticateWhitelistAdminToken({
++    expectedToken: process.env.SSO_WHITELIST_ADMIN_TOKEN,
++    authorizationHeader: request.headers.get('authorization'),
++    actorHeader: request.headers.get('x-case-library-actor'),
++    reservedTokens: [
++      process.env.SSO_SHARED_SECRET,
++      process.env.ADMIN_PASSWORD,
++      process.env.ADMIN_SESSION_SECRET,
++    ],
++  });
++}
++
+@@ -63 +80 @@ export function isValidFid(fid: string): boolean {
+-}
+\ No newline at end of file
++}
+diff --git a/src/app/api/admin/fids/route.ts b/src/app/api/admin/fids/route.ts
+index 94729ef..de0e67e 100644
+--- a/src/app/api/admin/fids/route.ts
++++ b/src/app/api/admin/fids/route.ts
+@@ -7 +7 @@ import {
+-  requireAdminOr401,
++  requireWhitelistAdminOr401,
+@@ -14 +14 @@ export async function GET(request: NextRequest) {
+-  const username = requireAdminOr401(request);
++  const username = requireWhitelistAdminOr401(request);
+@@ -24 +24 @@ export async function POST(request: NextRequest) {
+-  const username = requireAdminOr401(request);
++  const username = requireWhitelistAdminOr401(request);
+@@ -53 +53 @@ export async function POST(request: NextRequest) {
+-}
+\ No newline at end of file
++}
+diff --git a/src/app/api/admin/fids/[fid]/route.ts b/src/app/api/admin/fids/[fid]/route.ts
+index a689acd..e5c8242 100644
+--- a/src/app/api/admin/fids/[fid]/route.ts
++++ b/src/app/api/admin/fids/[fid]/route.ts
+@@ -6 +6 @@ import {
+-  requireAdminOr401,
++  requireWhitelistAdminOr401,
+@@ -15 +15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
+-  const username = requireAdminOr401(request);
++  const username = requireWhitelistAdminOr401(request);
+@@ -39 +39 @@ export async function DELETE(request: NextRequest, { params }: Params) {
+-  const username = requireAdminOr401(request);
++  const username = requireWhitelistAdminOr401(request);
+@@ -49 +49 @@ export async function DELETE(request: NextRequest, { params }: Params) {
+-}
+\ No newline at end of file
++}
+diff --git a/src/app/api/admin/origins/route.ts b/src/app/api/admin/origins/route.ts
+index b6014aa..d332368 100644
+--- a/src/app/api/admin/origins/route.ts
++++ b/src/app/api/admin/origins/route.ts
+@@ -7 +7 @@ import {
+-  requireAdminOr401,
++  requireWhitelistAdminOr401,
+@@ -16 +16 @@ export async function GET(request: NextRequest) {
+-  const username = requireAdminOr401(request);
++  const username = requireWhitelistAdminOr401(request);
+@@ -26 +26 @@ export async function POST(request: NextRequest) {
+-  const username = requireAdminOr401(request);
++  const username = requireWhitelistAdminOr401(request);
+@@ -54 +54 @@ export async function POST(request: NextRequest) {
+-}
+\ No newline at end of file
++}
+diff --git a/src/app/api/admin/origins/action/route.ts b/src/app/api/admin/origins/action/route.ts
+index 8acb751..5df5622 100644
+--- a/src/app/api/admin/origins/action/route.ts
++++ b/src/app/api/admin/origins/action/route.ts
+@@ -7 +7 @@ import {
+-  requireAdminOr401,
++  requireWhitelistAdminOr401,
+@@ -14 +14 @@ export async function POST(request: NextRequest) {
+-  const username = requireAdminOr401(request);
++  const username = requireWhitelistAdminOr401(request);
+@@ -48 +48 @@ export async function POST(request: NextRequest) {
+-}
+\ No newline at end of file
++}
+diff --git a/src/lib/whitelist-admin-token.ts b/src/lib/whitelist-admin-token.ts
+new file mode 100644
+--- /dev/null
++++ b/src/lib/whitelist-admin-token.ts
+@@ -0,0 +1,48 @@
++import { createHash, timingSafeEqual } from 'node:crypto';
++
++export interface WhitelistAdminTokenInput {
++  expectedToken: string | null | undefined;
++  authorizationHeader: string | null | undefined;
++  actorHeader: string | null | undefined;
++  reservedTokens?: Array<string | null | undefined>;
++}
++
++const MIN_TOKEN_LENGTH = 32;
++const MAX_ACTOR_LENGTH = 128;
++const MAX_ACTOR_HEADER_LENGTH = 1536;
++const VISIBLE_ASCII = /^[\x21-\x7e]+$/u;
++const ASCII = /^[\x00-\x7f]*$/u;
++const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/u;
++
++function sha256(value: string): Buffer {
++  return createHash('sha256').update(value, 'utf8').digest();
++}
++
++export function authenticateWhitelistAdminToken({
++  expectedToken,
++  authorizationHeader,
++  actorHeader,
++  reservedTokens = [],
++}: WhitelistAdminTokenInput): string | null {
++  const configuredToken = expectedToken?.trim() ?? '';
++  if (configuredToken.length < MIN_TOKEN_LENGTH || !VISIBLE_ASCII.test(configuredToken) || !authorizationHeader) {
++    return null;
++  }
++  if (reservedTokens.some((value) => {
++    const reserved = value?.trim() ?? '';
++    return reserved !== '' && reserved === configuredToken;
++  })) return null;
++
++  const match = /^Bearer[ \t]+(\S+)$/iu.exec(authorizationHeader.trim());
++  if (!match || !timingSafeEqual(sha256(match[1]), sha256(configuredToken))) return null;
++
++  if (!actorHeader || actorHeader.length > MAX_ACTOR_HEADER_LENGTH || !ASCII.test(actorHeader)) return null;
++  let actor: string;
++  try {
++    actor = decodeURIComponent(actorHeader).trim();
++  } catch {
++    return null;
++  }
++  if (!actor || Array.from(actor).length > MAX_ACTOR_LENGTH || CONTROL_CHARACTERS.test(actor)) return null;
++  return `case-library:${actor}`;
++}
+diff --git a/tests/whitelist-admin-token.test.mjs b/tests/whitelist-admin-token.test.mjs
+new file mode 100644
+--- /dev/null
++++ b/tests/whitelist-admin-token.test.mjs
+@@ -0,0 +1,87 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++
++import { authenticateWhitelistAdminToken } from '../src/lib/whitelist-admin-token.ts';
++
++const TOKEN = 'whitelist-admin-token-0123456789abcdef';
++
++function authenticate(overrides = {}) {
++  return authenticateWhitelistAdminToken({
++    expectedToken: TOKEN,
++    authorizationHeader: `Bearer ${TOKEN}`,
++    actorHeader: 'u-case-admin',
++    ...overrides,
++  });
++}
++
++test('白名单集成令牌：正确 Bearer 返回带来源前缀的审计 actor', () => {
++  assert.equal(authenticate(), 'case-library:u-case-admin');
++  assert.equal(
++    authenticate({
++      expectedToken: `  ${TOKEN}  `,
++      authorizationHeader: `bearer ${TOKEN}`,
++      actorHeader: encodeURIComponent('  管理员-甲🙂  '),
++    }),
++    'case-library:管理员-甲🙂',
++  );
++});
++
++test('白名单集成令牌：缺失、过短、错误或畸形令牌均拒绝', () => {
++  for (const expectedToken of [undefined, null, '', 'x'.repeat(31)]) {
++    assert.equal(authenticate({ expectedToken }), null);
++  }
++  const nonAsciiToken = `令牌${'x'.repeat(32)}`;
++  assert.equal(authenticate({
++    expectedToken: nonAsciiToken,
++    authorizationHeader: `Bearer ${nonAsciiToken}`,
++  }), null);
++  for (const authorizationHeader of [
++    undefined,
++    null,
++    '',
++    TOKEN,
++    'Basic abc',
++    'Bearer',
++    `Bearer wrong-${TOKEN}`,
++    `Bearer ${TOKEN} trailing`,
++  ]) {
++    assert.equal(authenticate({ authorizationHeader }), null);
++  }
++});
++
++test('白名单集成令牌：不能使用 SSO 共享密钥代替独立令牌', () => {
++  const ssoSharedSecret = 'sso-shared-secret-0123456789abcdef';
++  assert.equal(authenticate({ authorizationHeader: `Bearer ${ssoSharedSecret}` }), null);
++});
++
++test('白名单集成令牌：配置值与任一旧密钥相同则关闭，空值和不同密钥不影响', () => {
++  assert.equal(authenticate({ reservedTokens: [`  ${TOKEN}  `] }), null);
++  assert.equal(authenticate({ reservedTokens: ['different-secret', TOKEN] }), null);
++  assert.equal(authenticate({ reservedTokens: [undefined, null, '', '   ', 'different-secret'] }), 'case-library:u-case-admin');
++});
++
++test('白名单集成令牌：actor header 必须是可解码的 ASCII，解码后校验真实 UID', () => {
++  for (const actorHeader of [
++    undefined,
++    null,
++    '',
++    '   ',
++    'x'.repeat(129),
++    'x'.repeat(1537),
++    '中文🙂',
++    '%E4%B8%AD%',
++    'uid%0Asuffix',
++    'uid%7Fsuffix',
++    'uid%C2%85suffix',
++    'uid\u0000suffix',
++    'uid\nsuffix',
++    'uid\u007fsuffix',
++    'uid\u0085suffix',
++  ]) {
++    assert.equal(authenticate({ actorHeader }), null);
++  }
++  assert.equal(
++    authenticate({ actorHeader: encodeURIComponent('🙂'.repeat(128)) }),
++    `case-library:${'🙂'.repeat(128)}`,
++  );
++});

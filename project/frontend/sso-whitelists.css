@@ -1,0 +1,104 @@
+.sso-whitelists-panel {
+  margin-bottom: 1.5rem;
+}
+
+.sso-whitelists-panel > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  cursor: pointer;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.sso-whitelists-panel[open] > summary {
+  margin-bottom: 1rem;
+}
+
+.sso-whitelists-summary-note,
+.sso-whitelists-operator-line {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.sso-whitelists-warning {
+  margin-bottom: 1rem;
+  color: var(--warn);
+  font-size: 0.82rem;
+}
+
+.sso-whitelists-body,
+.sso-whitelists-section {
+  display: grid;
+  gap: 1rem;
+}
+
+.sso-whitelists-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sso-whitelists-operator-line {
+  margin: 0;
+}
+
+.sso-whitelists-operator-line code {
+  color: var(--text);
+}
+
+.sso-whitelists-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sso-whitelists-toolbar .notice {
+  flex: 1;
+}
+
+.sso-whitelists-section {
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.sso-whitelists-section h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.sso-whitelists-form {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.8fr) minmax(12rem, 1.2fr) auto;
+  gap: 0.8rem;
+  align-items: end;
+}
+
+.sso-whitelists-form .field {
+  margin: 0;
+}
+
+.sso-whitelists-table {
+  min-width: 40rem;
+}
+
+.sso-whitelists-table td:first-child {
+  max-width: 24rem;
+  overflow-wrap: anywhere;
+}
+
+[data-admin-theme='light'] .sso-whitelists-section {
+  border-color: var(--border);
+}
+
+@media (max-width: 720px) {
+  .sso-whitelists-panel > summary,
+  .sso-whitelists-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sso-whitelists-form {
+    grid-template-columns: 1fr;
+  }
+}
