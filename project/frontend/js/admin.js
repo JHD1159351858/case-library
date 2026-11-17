@@ -23,6 +23,7 @@ const COVER_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'imag
 const state = {
   session: { user: null, ssoEnabled: false, backendReady: false },
   items: [],
+  orderSaving: false,
   stats: null,
   editingId: null,
   uploading: false,
@@ -213,6 +214,7 @@ function renderRows() {
     if (agent.id === state.editingId) row.classList.add('row-editing');
     const place = [agent.discipline, agent.schoolName].filter(Boolean).join(' · ') || '—';
     row.innerHTML = `
+      <td class="cell-order"><button class="agent-drag-handle" type="button" data-action="drag-order" draggable="${!state.orderSaving}" ${state.orderSaving ? 'disabled' : ''} aria-label="拖动调整${escapeHtml(agent.name)}的展示顺序" title="按住拖动，调整前台列表顺序">⠿</button></td>
       <td class="cell-cover">${renderCoverCell(agent)}</td>
       <td class="cell-name">
         <button class="link-btn" type="button" data-action="detail">${escapeHtml(agent.name)}</button>
@@ -229,6 +231,7 @@ function renderRows() {
       </td>
     `;
     row.addEventListener('click', (event) => {
+      if (state.orderSaving) return;
       const action = event.target?.dataset?.action ?? 'detail';
       if (action === 'detail') return openDetail(agent.id);
       if (action === 'edit') return startEdit(agent.id);
@@ -241,17 +244,115 @@ function renderRows() {
 }
 
 async function loadAgents() {
+  if (state.orderSaving) return;
   try {
-    const response = await fetch('/api/agents?limit=500', { credentials: 'same-origin', headers: { accept: 'application/json' } });
-    if (!response.ok) throw new Error(`status ${response.status}`);
-    const data = await response.json();
-    state.items = Array.isArray(data.items) ? data.items : [];
+    const items = [];
+    let total;
+    do {
+      const response = await fetch(`/api/agents?limit=500${items.length ? `&offset=${items.length}` : ''}`, { credentials: 'same-origin', headers: { accept: 'application/json' } });
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      const data = await response.json();
+      if (!Array.isArray(data.items)) throw new Error('invalid_list');
+      items.push(...data.items);
+      total = data.total ?? items.length;
+      if (!data.items.length && items.length < total) throw new Error('incomplete_list');
+    } while (items.length < total);
+    state.items = items;
   } catch {
     state.items = [];
     toast('读取记录失败，请确认后端服务已启动', 'error');
   }
   renderRows();
   renderFeaturedSettingsOptions();
+}
+
+async function moveAgentOrder(agentId, targetId, after) {
+  if (state.orderSaving || !state.session.user?.isAdmin || agentId === targetId) return;
+  const original = state.items;
+  const items = [...original];
+  const index = items.findIndex((item) => item.id === agentId);
+  if (index < 0 || !items.some((item) => item.id === targetId)) return;
+  const [agent] = items.splice(index, 1);
+  const target = items.findIndex((item) => item.id === targetId);
+  items.splice(target + (after ? 1 : 0), 0, agent);
+  const agentIds = items.map((item) => item.id);
+  if (agentIds.every((id, position) => id === original[position].id)) return;
+  const notice = $('agent-order-notice');
+  state.orderSaving = true;
+  state.items = items;
+  renderRows();
+  if (notice) notice.textContent = '正在保存前台列表顺序…';
+  try {
+    const { ok, data } = await fetchJson('/api/agent-order', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ agentIds })
+    });
+    if (!ok || !Array.isArray(data?.agentIds) || data.agentIds.length !== agentIds.length
+      || !data.agentIds.every((id, position) => id === agentIds[position]) || !Number.isInteger(data.updatedAt)) {
+      throw new Error('order_not_confirmed');
+    }
+    if (notice) notice.textContent = '排序已保存，前台列表已更新；热门 TOP 1–3 仍由上方单独设置。';
+  } catch {
+    state.items = original;
+    if (notice) notice.textContent = '未能确认排序结果，已恢复本页顺序，请刷新确认后重试。';
+    toast('排序保存失败，请刷新确认', 'error');
+  } finally {
+    state.orderSaving = false;
+    renderRows();
+  }
+}
+
+function bindAgentOrdering() {
+  const tbody = $('agent-rows');
+  if (!tbody) return;
+  let draggedId = null;
+  const clear = () => {
+    tbody.classList.remove('agent-order-dragging');
+    for (const row of tbody.querySelectorAll('tr')) {
+      row.classList.remove('row-dragging', 'row-drop-before', 'row-drop-after');
+    }
+  };
+  const targetRow = (event) => {
+    const row = event.target?.closest?.('tr[data-agent-id]');
+    return row && tbody.contains(row) ? row : null;
+  };
+  const isAfter = (event, row) => {
+    const box = row.getBoundingClientRect();
+    return event.clientY >= box.top + box.height / 2;
+  };
+  tbody.addEventListener('dragstart', (event) => {
+    const grip = event.target?.closest?.('[data-action="drag-order"]');
+    const row = grip && targetRow(event);
+    if (!row || state.orderSaving || !state.session.user?.isAdmin) return event.preventDefault();
+    draggedId = row.dataset.agentId;
+    row.classList.add('row-dragging');
+    tbody.classList.add('agent-order-dragging');
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', draggedId);
+    }
+  });
+  tbody.addEventListener('dragover', (event) => {
+    const row = targetRow(event);
+    if (!draggedId || state.orderSaving || !row) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    for (const target of tbody.querySelectorAll('tr')) target.classList.remove('row-drop-before', 'row-drop-after');
+    if (row.dataset.agentId !== draggedId) row.classList.add(isAfter(event, row) ? 'row-drop-after' : 'row-drop-before');
+  });
+  tbody.addEventListener('drop', (event) => {
+    const row = targetRow(event);
+    if (!draggedId || state.orderSaving || !row) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const agentId = draggedId;
+    draggedId = null;
+    clear();
+    return moveAgentOrder(agentId, row.dataset.agentId, isAfter(event, row));
+  });
+  tbody.addEventListener('dragend', () => {
+    draggedId = null;
+    clear();
+  });
 }
 
 async function toggleAgentVisibility(agent, button) {
@@ -1130,6 +1231,8 @@ async function refreshSession() {
 }
 
 /* ---------------- 事件绑定与启动 ---------------- */
+
+bindAgentOrdering();
 
 $('detail-close')?.addEventListener('click', closeDetail);
 $('detail-backdrop')?.addEventListener('click', (event) => {

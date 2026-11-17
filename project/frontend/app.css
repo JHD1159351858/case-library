@@ -1481,6 +1481,29 @@ a {
   width: 8.5rem;
 }
 
+.data-table .cell-order {
+  width: 3rem;
+  padding-left: 0.65rem;
+  padding-right: 0.65rem;
+  text-align: center;
+}
+
+.agent-drag-handle {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: grab;
+  font-size: 1.5rem;
+  padding: 0.25rem;
+}
+
+.agent-drag-handle:active { cursor: grabbing; }
+.agent-drag-handle:disabled { cursor: wait; opacity: 0.4; }
+#agent-rows.agent-order-dragging .agent-drag-handle { pointer-events: none; }
+.data-table .row-dragging { opacity: 0.45; }
+.data-table .row-drop-before > td { box-shadow: inset 0 2px 0 var(--accent); }
+.data-table .row-drop-after > td { box-shadow: inset 0 -2px 0 var(--accent); }
+
 .cell-actions {
   white-space: nowrap;
 }

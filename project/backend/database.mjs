@@ -120,15 +120,23 @@ export function createDatabase({ databasePath, now = Date.now }) {
     deleteSession: database.prepare('DELETE FROM sessions WHERE token_hash = ?'),
     purgeSessions: database.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
     listAgents: database.prepare(`
-      WITH featured AS (
+      WITH manual_order AS (
+        SELECT slot.value AS agent_id, CAST(slot.key AS INTEGER) AS position
+        FROM agent_order_settings AS settings, json_each(settings.data_json) AS slot
+        WHERE settings.id = 1 AND slot.type = 'text'
+      ), featured AS (
         SELECT slot.value AS agent_id, CAST(slot.key AS INTEGER) AS position
         FROM featured_agent_settings AS settings, json_each(settings.data_json) AS slot
         WHERE settings.id = 1 AND slot.type = 'text'
       )
       SELECT ${AGENT_LIST_COLUMNS}
-      FROM agents LEFT JOIN featured ON featured.agent_id = agents.id
+      FROM agents
+      LEFT JOIN manual_order ON manual_order.agent_id = agents.id
+      LEFT JOIN featured ON featured.agent_id = agents.id
       WHERE ${AGENT_FILTER_SQL}
-      ORDER BY CASE WHEN featured.position IS NULL THEN 1 ELSE 0 END,
+      ORDER BY CASE WHEN manual_order.position IS NULL THEN 1 ELSE 0 END,
+        manual_order.position ASC,
+        CASE WHEN featured.position IS NULL THEN 1 ELSE 0 END,
         featured.position ASC, updated_at DESC, id ASC
       LIMIT :limit OFFSET :offset
     `),
@@ -205,6 +213,11 @@ export function createDatabase({ databasePath, now = Date.now }) {
     featuredAgentSettings: database.prepare('SELECT data_json, updated_at FROM featured_agent_settings WHERE id = 1'),
     saveFeaturedAgentSettings: database.prepare(`
       INSERT INTO featured_agent_settings (id, data_json, updated_at) VALUES (1, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json, updated_at = excluded.updated_at
+    `),
+    agentOrderSettings: database.prepare('SELECT data_json, updated_at FROM agent_order_settings WHERE id = 1'),
+    saveAgentOrderSettings: database.prepare(`
+      INSERT INTO agent_order_settings (id, data_json, updated_at) VALUES (1, ?, ?)
       ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json, updated_at = excluded.updated_at
     `)
   };
@@ -413,6 +426,17 @@ export function createDatabase({ databasePath, now = Date.now }) {
       const normalized = normalizeFeaturedAgentIds(agentIds);
       statements.saveFeaturedAgentSettings.run(JSON.stringify(normalized), timestamp);
       return { agentIds: normalized, updatedAt: timestamp };
+    },
+
+    agentOrderSettings() {
+      const row = statements.agentOrderSettings.get();
+      return row ? { agentIds: JSON.parse(row.data_json), updatedAt: row.updated_at } : { agentIds: [], updatedAt: null };
+    },
+
+    saveAgentOrderSettings(agentIds, timestamp = now()) {
+      const dataJson = JSON.stringify(agentIds);
+      statements.saveAgentOrderSettings.run(dataJson, timestamp);
+      return { agentIds: JSON.parse(dataJson), updatedAt: timestamp };
     },
 
     /** 访客身份由请求层确定；统计写入不修改案例更新时间。 */

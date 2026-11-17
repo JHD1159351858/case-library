@@ -115,6 +115,13 @@ CREATE TABLE IF NOT EXISTS featured_agent_settings (
   updated_at INTEGER NOT NULL
 ) STRICT;
 
+-- 案例列表手动排序：整组案例 ID 原子覆盖，与热门展示位独立。
+CREATE TABLE IF NOT EXISTS agent_order_settings (
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  data_json  TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+) STRICT;
+
 -- 上传图片字节与数据库共同持久化，不依赖实例临时目录。
 CREATE TABLE IF NOT EXISTS uploaded_images (
   file_name    TEXT PRIMARY KEY,

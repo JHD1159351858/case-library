@@ -23,6 +23,7 @@ const EXTERNAL_ICON =
 const state = {
   session: { user: null, ssoEnabled: false, backendReady: false },
   items: [],
+  manualOrder: false,
   page: 1,
   pageSize: 50,
   total: 0,
@@ -72,9 +73,11 @@ function renderMeta() {
   }
   meta.innerHTML = condition
     ? `${condition} 匹配到 <strong>${state.total}</strong> 条记录。`
-    : state.featuredAgents?.configured
-      ? `共 <strong>${state.total}</strong> 条记录，管理员置顶案例优先，其余按更新时间倒序。`
-      : `共 <strong>${state.total}</strong> 条记录，按更新时间倒序。`;
+    : state.manualOrder
+      ? `共 <strong>${state.total}</strong> 条记录，按管理员设置的顺序展示。`
+      : state.featuredAgents?.configured
+        ? `共 <strong>${state.total}</strong> 条记录，管理员置顶案例优先，其余按更新时间倒序。`
+        : `共 <strong>${state.total}</strong> 条记录，按更新时间倒序。`;
 }
 
 function renderPagination() {
@@ -400,6 +403,7 @@ async function loadAgents() {
   let items;
   let total;
   let usingDemo = false;
+  let manualOrder = false;
   let popular = new Map();
   try {
     const response = await fetch(`/api/agents?${query}`, { credentials: 'same-origin', headers: { accept: 'application/json' } });
@@ -409,6 +413,7 @@ async function loadAgents() {
     if (!Array.isArray(data.items) || !Number.isInteger(data.total) || data.total < 0) throw new Error('invalid_list');
     items = data.items;
     total = data.total;
+    manualOrder = data.manualOrder === true;
     const page = Math.min(requestedPage, Math.max(1, Math.ceil(total / state.pageSize)));
     if (page !== requestedPage) {
       state.page = page;
@@ -431,6 +436,7 @@ async function loadAgents() {
   state.total = total;
   state.loading = false;
   state.usingDemo = usingDemo;
+  state.manualOrder = manualOrder;
   state.popular = popular;
   renderMeta();
   renderGrid();

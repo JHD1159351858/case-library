@@ -1259,6 +1259,88 @@ function saveFeatured(base, cookie, agentIds) {
   });
 }
 
+function saveAgentOrder(base, cookie, agentIds, extraHeaders = {}) {
+  return getJson(`${base}/api/agent-order`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}), ...extraHeaders },
+    body: JSON.stringify({ agentIds })
+  });
+}
+
+test('拖动排序：保存后全局排序再分页筛选，隐藏案例仍隐藏且热门三位与案例内容不变', async () => {
+  await withEnvironment(async ({ base, center, site }) => {
+    const { cookie } = await login({ base, center }, 'admin');
+    const first = await createFeaturedCase(base, cookie, '排序甲', { discipline: '理学', data: { 说明: '保留内容' } });
+    const second = await createFeaturedCase(base, cookie, '排序乙', { discipline: '理学' });
+    const hidden = await createFeaturedCase(base, cookie, '排序隐藏', { discipline: '理学', status: 'inactive' });
+    const third = await createFeaturedCase(base, cookie, '排序丙', { discipline: '工学' });
+    const agents = [first, second, hidden, third];
+    const before = agents.map((agent) => ({ ...site.db.findAgentById(agent.id) }));
+    await saveFeatured(base, cookie, [first.id, null, third.id]);
+    const featuredBefore = (await getJson(`${base}/api/featured-agents`)).body;
+    assert.equal((await getJson(`${base}/api/agents`)).body.manualOrder, false);
+
+    const agentIds = [second.id, hidden.id, third.id, first.id];
+    const saved = await saveAgentOrder(base, cookie, agentIds);
+    assert.equal(saved.status, 200, saved.text);
+    assert.deepEqual(saved.body.agentIds, agentIds);
+    assert.ok(Number.isInteger(saved.body.updatedAt));
+    assert.deepEqual(site.db.agentOrderSettings(), saved.body);
+    assert.deepEqual(agents.map((agent) => ({ ...site.db.findAgentById(agent.id) })), before);
+    assert.deepEqual((await getJson(`${base}/api/featured-agents`)).body, featuredBefore);
+
+    const adminList = await getJson(`${base}/api/agents`, { headers: { cookie } });
+    assert.deepEqual(adminList.body.items.map((item) => item.id), agentIds);
+    assert.equal(adminList.body.manualOrder, true);
+    const firstPage = await getJson(`${base}/api/agents?limit=2&offset=0`);
+    const nextPage = await getJson(`${base}/api/agents?limit=2&offset=2`);
+    assert.equal(firstPage.body.total, 3);
+    assert.equal(firstPage.body.manualOrder, true);
+    assert.deepEqual(firstPage.body.items.map((item) => item.id), [second.id, third.id]);
+    assert.deepEqual(nextPage.body.items.map((item) => item.id), [first.id]);
+    const filtered = await getJson(`${base}/api/agents?discipline=${encodeURIComponent('理学')}&q=${encodeURIComponent('排序')}`);
+    assert.deepEqual(filtered.body.items.map((item) => item.id), [second.id, first.id]);
+    const cleared = await saveAgentOrder(base, cookie, []);
+    assert.equal(cleared.status, 200, cleared.text);
+    assert.deepEqual(cleared.body.agentIds, []);
+    assert.equal((await getJson(`${base}/api/agents`)).body.manualOrder, true, '显式保存空排序仍有手动配置');
+  });
+});
+
+test('拖动排序：仅同源管理员可保存，非法输入和错误方法不覆盖已有顺序', async () => {
+  await withEnvironment(async ({ base, center, site }) => {
+    const admin = await login({ base, center }, 'admin');
+    const student = await login({ base, center }, 'student');
+    const agent = await createFeaturedCase(base, admin.cookie, '保留排序案例');
+    const saved = await saveAgentOrder(base, admin.cookie, [agent.id]);
+    assert.equal(saved.status, 200, saved.text);
+    const previous = saved.body;
+    assert.equal((await saveAgentOrder(base, null, [])).status, 401);
+    assert.equal((await saveAgentOrder(base, student.cookie, [])).status, 403);
+    for (const headers of [{ origin: 'https://other.example' }, { origin: 'null' }, { 'sec-fetch-site': 'same-site' }, { 'sec-fetch-site': 'cross-site' }]) {
+      assert.equal((await saveAgentOrder(base, admin.cookie, [], headers)).status, 403);
+    }
+    const url = `${base}/api/agent-order`;
+    for (const body of [{}, { agentIds: null }, { agentIds: [agent.id, agent.id] }, { agentIds: [''] },
+      { agentIds: [123] }, { agentIds: [null] }, { agentIds: ['missing-agent'] }, { agentIds: [agent.id], extra: true }]) {
+      const result = await getJson(url, { method: 'POST', headers: { 'content-type': 'application/json', cookie: admin.cookie }, body: JSON.stringify(body) });
+      assert.equal(result.status, 400, JSON.stringify(body));
+      assert.deepEqual(site.db.agentOrderSettings(), previous);
+    }
+    for (const [contentType, body] of [['text/plain', JSON.stringify({ agentIds: [] })], ['application/json', '{'], ['application/json', JSON.stringify({ agentIds: [], oversized: 'x'.repeat(70 * 1024) })]]) {
+      const result = await getJson(url, { method: 'POST', headers: { 'content-type': contentType, cookie: admin.cookie }, body });
+      assert.equal(result.status, body.length > 64 * 1024 ? 413 : 400);
+      assert.deepEqual(site.db.agentOrderSettings(), previous);
+    }
+    for (const method of ['GET', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']) {
+      const result = await getJson(url, { method });
+      assert.equal(result.status, 405, method);
+      assert.equal(result.headers.allow, 'POST');
+    }
+    assert.deepEqual(site.db.agentOrderSettings(), previous);
+  });
+});
+
 test('展示隐藏：状态切换持久保存，普通访客不可查询隐藏案例，管理员可维护并恢复展示', async () => {
   await withEnvironment(async ({ base, center, site }) => {
     const admin = await login({ base, center }, 'admin');

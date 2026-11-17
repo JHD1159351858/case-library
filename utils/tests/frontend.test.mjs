@@ -55,7 +55,7 @@ function page(name, overrides = {}) {
     (name === 'admin' ? ', uploadCover, resetForm, fillForm, startEdit, submitForm' : ', selectPopularAgents, loadPopularAgents, loadAgents, loadCardEffects, renderCard, renderGrid, bindSearch, bindFilters, bindPagination, renderPagination') + ' };', context);
   runInContext('Object.assign(api, { loadFeaturedAgents: typeof loadFeaturedAgents === "function" ? loadFeaturedAgents : undefined, loadFeaturedSettings: typeof loadFeaturedSettings === "function" ? loadFeaturedSettings : undefined, initFeaturedSettings: typeof initFeaturedSettings === "function" ? initFeaturedSettings : undefined, saveFeaturedSettings: typeof saveFeaturedSettings === "function" ? saveFeaturedSettings : undefined });', context);
   runInContext('Object.assign(api, { loadSiteStats: typeof loadSiteStats === "function" ? loadSiteStats : undefined });', context);
-  if (name === 'admin') runInContext('Object.assign(api, { renderRows, toggleAgentVisibility: typeof toggleAgentVisibility === "function" ? toggleAgentVisibility : undefined });', context);
+  if (name === 'admin') runInContext('Object.assign(api, { renderRows, loadAgents, moveAgentOrder: typeof moveAgentOrder === "function" ? moveAgentOrder : undefined, bindAgentOrdering: typeof bindAgentOrdering === "function" ? bindAgentOrdering : undefined, toggleAgentVisibility: typeof toggleAgentVisibility === "function" ? toggleAgentVisibility : undefined });', context);
   if (name === 'admin') runInContext('renderRows = () => {}; loadAgents = async () => {}; loadStats = async () => {};', context);
   if (name === 'admin') runInContext('Object.assign(api, { renderViewCell: typeof renderViewCell === "function" ? renderViewCell : undefined, openViews: typeof openViews === "function" ? openViews : undefined });', context);
   if (name === 'admin') {
@@ -113,6 +113,113 @@ for (const mode of ['尚未配置', '请求失败']) {
     assert.deepEqual([...result.keys()], ['higher', 'lower']);
   });
 }
+
+test('拖动排序：上下移动后自动保存全部记录顺序，不改热门配置或案例字段', async () => {
+  const calls = [];
+  const { api, get } = page('admin', { fetchJson: async (url, options) => {
+    const body = JSON.parse(options.body);
+    calls.push([url, options.method, body]);
+    return { ok: true, data: { ...body, updatedAt: 5 } };
+  } });
+  api.state.items = [{ id: 'a', name: '甲', updatedAt: 1 }, { id: 'b', status: 'inactive' }, { id: 'c', name: '丙' }];
+  api.state.featuredPublishedAgentIds = ['c', null, 'a'];
+  await api.moveAgentOrder('c', 'a', false);
+  assert.deepEqual(Array.from(api.state.items, (item) => item.id), ['c', 'a', 'b']);
+  assert.deepEqual(calls[0], ['/api/agent-order', 'POST', { agentIds: ['c', 'a', 'b'] }]);
+  assert.equal(api.state.items[1].updatedAt, 1);
+  assert.equal(api.state.items[2].status, 'inactive');
+  assert.deepEqual(api.state.featuredPublishedAgentIds, ['c', null, 'a']);
+  assert.match(get('agent-order-notice').textContent, /已保存.*前台/);
+  await api.moveAgentOrder('c', 'b', true);
+  assert.deepEqual(Array.from(api.state.items, (item) => item.id), ['a', 'b', 'c']);
+  assert.equal(api.state.orderSaving, false);
+});
+
+test('拖动排序：保存期间阻止重复请求，相同位置或无效目标不写入', async () => {
+  const pending = deferred();
+  let requests = 0;
+  const { api } = page('admin', { fetchJson: () => { requests++; return pending.promise; } });
+  api.state.items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  await api.moveAgentOrder('a', 'a', false);
+  await api.moveAgentOrder('a', 'b', false);
+  await api.moveAgentOrder('missing', 'a', false);
+  assert.equal(requests, 0);
+  const saving = api.moveAgentOrder('c', 'a', false);
+  assert.equal(api.state.orderSaving, true);
+  await api.moveAgentOrder('b', 'c', false);
+  assert.equal(requests, 1);
+  pending.resolve({ ok: true, data: { agentIds: ['c', 'a', 'b'], updatedAt: 1 } });
+  await saving;
+  assert.equal(api.state.orderSaving, false);
+});
+
+test('拖动排序：未授权、保存失败或回执不一致时不显示成功，恢复本页顺序', async () => {
+  for (const result of [{ ok: false, status: 403 }, { ok: false, status: 500 }, { ok: true, data: { agentIds: ['a', 'b'] } }, new Error('offline')]) {
+    const { api, get } = page('admin', { fetchJson: async () => {
+      if (result instanceof Error) throw result;
+      return result;
+    } });
+    api.state.items = [{ id: 'a' }, { id: 'b' }];
+    await api.moveAgentOrder('b', 'a', false);
+    assert.deepEqual(Array.from(api.state.items, (item) => item.id), ['a', 'b']);
+    assert.equal(api.state.orderSaving, false);
+    assert.match(get('agent-order-notice').textContent, /权限|失败|确认/);
+    assert.doesNotMatch(get('agent-order-notice').textContent, /已保存/);
+  }
+});
+
+test('拖动排序：拖动手柄、目标上下半行和放下事件触发真实排序保存', async () => {
+  const calls = [];
+  const { api, get } = page('admin', { fetchJson: async (_url, options) => {
+    const body = JSON.parse(options.body);
+    calls.push(body);
+    return { ok: true, data: { ...body, updatedAt: 1 } };
+  } });
+  api.state.items = [{ id: 'a' }, { id: 'b' }];
+  const tbody = get('agent-rows');
+  const tbodyClasses = new Set();
+  tbody.classList = { add: (name) => tbodyClasses.add(name), remove: (name) => tbodyClasses.delete(name) };
+  const row = (id) => {
+    const classes = new Set();
+    return { dataset: { agentId: id }, classList: { add: (...names) => names.forEach((name) => classes.add(name)), remove: (...names) => names.forEach((name) => classes.delete(name)) },
+      getBoundingClientRect: () => ({ top: 100, height: 40 }), closest() { return this; } };
+  };
+  const rows = [row('a'), row('b')];
+  tbody.contains = (target) => rows.includes(target);
+  tbody.querySelectorAll = () => rows;
+  const transfer = { setData: (kind, value) => calls.push([kind, value]) };
+  const grip = { closest: (selector) => selector === '[data-action="drag-order"]' ? grip : rows[1] };
+  api.bindAgentOrdering();
+  tbody.dispatch('dragstart', { target: grip, dataTransfer: transfer });
+  assert.equal(tbodyClasses.has('agent-order-dragging'), true, '拖动期间让放下位置命中整行，避免手柄按钮拦截');
+  tbody.dispatch('dragover', { target: rows[0], clientY: 105, dataTransfer: transfer });
+  await tbody.dispatch('drop', { target: rows[0], clientY: 105, stopPropagation() {} });
+  assert.deepEqual(calls, [['text/plain', 'b'], { agentIds: ['b', 'a'] }]);
+  assert.deepEqual(Array.from(api.state.items, (item) => item.id), ['b', 'a']);
+  assert.equal(tbodyClasses.has('agent-order-dragging'), false);
+});
+
+test('拖动排序：后台读取超过500条的全部页，避免只排序首批记录', async () => {
+  const calls = [];
+  const all = Array.from({ length: 501 }, (_, index) => ({ id: `a${index}` }));
+  const { api } = page('admin', { fetch: async (url) => {
+    calls.push(url);
+    const offset = Number(new URL(url, 'http://test').searchParams.get('offset') || 0);
+    return { ok: true, json: async () => ({ total: all.length, items: all.slice(offset, offset + 500) }) };
+  } });
+  await api.loadAgents();
+  assert.equal(api.state.items.length, 501);
+  assert.equal(new URL(calls[1], 'http://test').searchParams.get('offset'), '500');
+});
+
+test('拖动排序：前台列表显示管理员排序说明，热门三位仍使用独立配置', async () => {
+  const { api, get } = paginatedPage(paginationItems(2), { fetch: async () => ({ ok: true, json: async () => ({ total: 2, items: paginationItems(2), manualOrder: true }) }) });
+  api.state.featuredAgents = { configured: true, agentIds: ['page-2', null, null], items: [{ id: 'page-2', position: 1, viewStats: { viewCount: 0 } }] };
+  await api.loadAgents();
+  assert.match(get('result-meta').innerHTML, /管理员.*顺序/);
+  assert.doesNotMatch(get('result-meta').innerHTML, /更新时间倒序/);
+  assert.deepEqual([...api.state.popular.keys()], ['page-2']);
+});
 
 test('案例展示：每条记录有显示或隐藏按钮，点击后仅保存展示状态', async () => {
   const calls = [];

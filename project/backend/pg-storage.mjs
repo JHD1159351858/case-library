@@ -198,7 +198,13 @@ export async function createPgStorage(options) {
     const filterParams = [keyword, pattern, disciplineVal, schoolVal, statusVal];
 
     const listRes = await client.query(`
-      WITH featured AS (
+      WITH manual_order AS (
+        SELECT slot.agent_id, slot.position
+        FROM agent_order_settings AS settings
+        CROSS JOIN LATERAL jsonb_array_elements_text(settings.data_json::jsonb)
+          WITH ORDINALITY AS slot(agent_id, position)
+        WHERE settings.id = 1 AND slot.agent_id IS NOT NULL
+      ), featured AS (
         SELECT slot.agent_id, slot.position
         FROM featured_agent_settings AS settings
         CROSS JOIN LATERAL jsonb_array_elements_text(settings.data_json::jsonb)
@@ -206,9 +212,13 @@ export async function createPgStorage(options) {
         WHERE settings.id = 1 AND slot.agent_id IS NOT NULL
       )
       SELECT ${AGENT_LIST_COLUMNS}
-      FROM agents LEFT JOIN featured ON featured.agent_id = agents.id
+      FROM agents
+      LEFT JOIN manual_order ON manual_order.agent_id = agents.id
+      LEFT JOIN featured ON featured.agent_id = agents.id
       WHERE ${filter}
-      ORDER BY CASE WHEN featured.position IS NULL THEN 1 ELSE 0 END,
+      ORDER BY CASE WHEN manual_order.position IS NULL THEN 1 ELSE 0 END,
+        manual_order.position ASC,
+        CASE WHEN featured.position IS NULL THEN 1 ELSE 0 END,
         featured.position ASC, updated_at DESC, id ASC
       LIMIT $6 OFFSET $7
     `, [...filterParams, safeLimit, safeOffset]);
@@ -377,6 +387,21 @@ export async function createPgStorage(options) {
     return { agentIds: normalized, updatedAt: timestamp };
   }
 
+  async function agentOrderSettings() {
+    const r = await client.query('SELECT data_json, updated_at FROM agent_order_settings WHERE id = 1');
+    const row = r.rows[0];
+    return row ? { agentIds: JSON.parse(row.data_json), updatedAt: Number(row.updated_at) } : { agentIds: [], updatedAt: null };
+  }
+
+  async function saveAgentOrderSettings(agentIds, timestamp = now()) {
+    const dataJson = JSON.stringify(agentIds);
+    await client.query(`
+      INSERT INTO agent_order_settings (id, data_json, updated_at) VALUES (1, $1, $2)
+      ON CONFLICT (id) DO UPDATE SET data_json = EXCLUDED.data_json, updated_at = EXCLUDED.updated_at
+    `, [dataJson, timestamp]);
+    return { agentIds: JSON.parse(dataJson), updatedAt: timestamp };
+  }
+
   /* ------------------------------ 浏览统计 ------------------------------ */
 
   function recordAgentView({ agentId, visitorKey, userId = null, timestamp = now() }) {
@@ -487,6 +512,8 @@ export async function createPgStorage(options) {
     siteVisitStats,
     featuredAgentSettings,
     saveFeaturedAgentSettings,
+    agentOrderSettings,
+    saveAgentOrderSettings,
     recordAgentView,
     agentViewStats,
     agentViewStatsForAgents,

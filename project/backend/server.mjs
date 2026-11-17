@@ -987,6 +987,45 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     return sendJson(response, 200, await featuredAgentsPayload(saved, true));
   }
 
+  async function handleSaveAgentOrder(request, response) {
+    const user = await currentUser(request);
+    if (!user) return sendJson(response, 401, { error: 'authentication_required' });
+    if (!computeIsAdmin(user, config)) return sendJson(response, 403, { error: 'admin_required' });
+    const origin = request.headers.origin;
+    const fetchSite = String(request.headers['sec-fetch-site'] ?? '').toLowerCase();
+    if ((origin !== undefined && safeOrigin(origin) !== safeOrigin(publicBase(request)))
+      || fetchSite === 'cross-site' || fetchSite === 'same-site') {
+      request.resume();
+      return sendJson(response, 403, { error: 'cross_origin_forbidden' });
+    }
+    if (String(request.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase() !== 'application/json') {
+      request.resume();
+      return sendJson(response, 400, { error: 'invalid_agent_order_ids' });
+    }
+    const body = await readAgentPayload(request, response);
+    if (!body) return;
+    if (Object.keys(body).length !== 1 || !Array.isArray(body.agentIds)) {
+      return sendJson(response, 400, { error: 'invalid_agent_order_ids' });
+    }
+    const agentIds = body.agentIds;
+    if (agentIds.some((value) => typeof value !== 'string' || !value.trim())
+      || new Set(agentIds).size !== agentIds.length) {
+      return sendJson(response, 400, { error: 'invalid_agent_order_ids' });
+    }
+    const missing = new Set(agentIds);
+    let offset = 0;
+    while (missing.size) {
+      const page = await db.listAgents({ limit: 500, offset });
+      for (const row of page.items) missing.delete(row.id);
+      offset += page.items.length;
+      if (!page.items.length || offset >= page.total) break;
+    }
+    if (missing.size) {
+      return sendJson(response, 400, { error: 'agent_order_not_found', agentId: missing.values().next().value });
+    }
+    return sendJson(response, 200, await db.saveAgentOrderSettings(agentIds, now()));
+  }
+
   async function handleListAgents(request, response, url) {
     const user = await currentUser(request);
     const isAdmin = user && computeIsAdmin(user, config);
@@ -997,6 +1036,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     const limit = Number.parseInt(url.searchParams.get('limit') ?? '100', 10);
     const offset = Number.parseInt(url.searchParams.get('offset') ?? '0', 10);
     const { items, total } = await db.listAgents({ query: keyword, discipline, school, status, limit, offset });
+    const order = await db.agentOrderSettings();
     const viewStats = await db.agentViewStatsForAgents(items.map((item) => item.id));
     return sendJson(response, 200, {
       items: items.map((row) => {
@@ -1004,6 +1044,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
         return { ...agentSummary(row), viewStats: isAdmin ? stats : { viewCount: stats.viewCount } };
       }),
       total,
+      manualOrder: order.updatedAt !== null,
       query: String(keyword).trim(),
       discipline: String(discipline).trim(),
       school: String(school).trim(),
@@ -1412,6 +1453,11 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
         if (method === 'GET') return await handleFeaturedAgents(request, response);
         if (method === 'POST') return await handleSaveFeaturedAgents(request, response);
         response.setHeader('Allow', 'GET, POST');
+        return sendJson(response, 405, { error: 'method_not_allowed' });
+      }
+      if (pathname === '/api/agent-order') {
+        if (method === 'POST') return await handleSaveAgentOrder(request, response);
+        response.setHeader('Allow', 'POST');
         return sendJson(response, 405, { error: 'method_not_allowed' });
       }
       if (pathname === '/api/sso-whitelists') {

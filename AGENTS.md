@@ -49,6 +49,7 @@ agent-official-website（case-library）：智能体官网，暗黑科幻风滚�
 ## API 速查（`project/backend/server.mjs`）
 - `GET /api/health`、`GET /api/auth/me`、`GET /api/auth/chaoxing/start|callback`、`POST /api/auth/logout`
 - `GET /api/agents`（匿名读）、`POST /api/agents`（管理员，未授权 401 为预期行为）
+- `POST /api/agent-order`（管理员）：持久化拖动后的案例列表顺序，独立于热门 TOP 1–3；SQLite/PG 的 `agent_order_settings` 启动自动建表，`GET /api/agents` 返回 `manualOrder`。见 `doc/agent-order.md`。
 - `GET /api/agents/stats`、`POST /api/agents/chat`、`GET /api/card-effects`、`POST /api/uploads`（管理员）
 - `GET /api/featured-agents`（匿名读）、`POST /api/featured-agents`（管理员）：保存三个现有热门 TOP 展示位，配置持久化到当前数据库
 - `POST /api/site-visits`（公开页面上报）、`GET /api/site-visits`（管理员）：全站累计人数按浏览器 Cookie 去重，排除已登录管理员，数据保存在 `site_visitors` 表

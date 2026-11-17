@@ -80,6 +80,13 @@ CREATE TABLE IF NOT EXISTS featured_agent_settings (
     updated_at BIGINT NOT NULL
 );
 
+-- 案例列表手动排序（单行，与热门展示位独立）
+CREATE TABLE IF NOT EXISTS agent_order_settings (
+    id         INTEGER PRIMARY KEY CHECK (id = 1),
+    data_json  TEXT NOT NULL,
+    updated_at BIGINT NOT NULL
+);
+
 -- 7. 上传图片字节（共享持久化，不依赖实例临时目录）
 CREATE TABLE IF NOT EXISTS uploaded_images (
     file_name    TEXT PRIMARY KEY,
