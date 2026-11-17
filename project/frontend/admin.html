@@ -129,7 +129,7 @@
                   <th scope="col" class="cell-cover-th">封面</th>
                   <th scope="col">名称</th>
                   <th scope="col">学科 / 学校</th>
-                  <th scope="col">状态</th>
+                  <th scope="col">展示状态</th>
                   <th scope="col" class="cell-views">浏览人数 / 次数</th>
                   <th scope="col">更新时间</th>
                   <th scope="col" class="cell-actions-th">操作</th>
@@ -294,12 +294,12 @@
                 <p class="field-hint">选填，最多 200 字。</p>
               </div>
               <div class="field">
-                <label for="field-status">状态</label>
+                <label for="field-status">展示状态</label>
                 <select class="input" id="field-status" name="status">
-                  <option value="active">已启用</option>
-                  <option value="inactive">未启用</option>
+                  <option value="active">展示中</option>
+                  <option value="inactive">已隐藏</option>
                 </select>
-                <p class="field-hint">未启用的记录在查询平台仍可见，但标记为未启用。</p>
+                <p class="field-hint">隐藏后普通访客不可见，管理员仍可在后台查看和恢复显示。</p>
               </div>
             </div>
 

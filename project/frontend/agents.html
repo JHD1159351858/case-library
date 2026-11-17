@@ -46,12 +46,12 @@
         <span class="filter-label">所属学校</span>
         <select class="input filter-select" id="filter-school"><option value="">全部学校</option></select>
       </label>
-      <label class="filter-field">
-        <span class="filter-label">状态</span>
+      <label class="filter-field" id="filter-visibility" hidden>
+        <span class="filter-label">展示状态</span>
         <select class="input filter-select" id="filter-status">
           <option value="">全部状态</option>
-          <option value="active">已启用</option>
-          <option value="inactive">未启用</option>
+          <option value="active">展示中</option>
+          <option value="inactive">已隐藏</option>
         </select>
       </label>
       <button class="btn btn-ghost btn-sm" type="button" id="filter-clear">清空筛选</button>

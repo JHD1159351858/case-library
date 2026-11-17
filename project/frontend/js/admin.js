@@ -7,7 +7,7 @@
  *
  * 因此本页隐藏的内容不构成安全依赖；未授权者即使直接调接口也会被 401 / 403 拒绝。
  *
- * 功能：数据概览（总数 / 学科 / 学校）、记录列表（明细 / 编辑 / 删除）、
+ * 功能：数据概览（总数 / 学科 / 学校）、记录列表（明细 / 显示隐藏 / 编辑 / 删除）、
  *      新增与编辑同一表单（编辑时回填全字段）、封面上传（multipart）。
  */
 import { consumeAuthNotice, escapeHtml, fetchJson, formatTime, loadSession, parseTags, renderAgentLink, renderSessionChip, resolveAgentLink, toast } from './session.js';
@@ -219,10 +219,11 @@ function renderRows() {
         ${agent.courseName ? `<div class="cell-sub">${escapeHtml(agent.courseName)}</div>` : ''}
       </td>
       <td class="cell-muted">${escapeHtml(place)}</td>
-      <td><span class="status-dot" data-status="${escapeHtml(agent.status || 'active')}">${agent.status === 'inactive' ? '未启用' : '已启用'}</span></td>
+      <td><span class="status-dot" data-status="${escapeHtml(agent.status || 'active')}">${agent.status === 'inactive' ? '已隐藏' : '展示中'}</span></td>
       <td class="cell-views">${renderViewCell(agent)}</td>
       <td class="cell-muted mono">${formatTime(agent.updatedAt)}</td>
       <td class="cell-actions">
+        <button class="btn btn-ghost btn-sm" type="button" data-action="visibility">${agent.status === 'inactive' ? '显示' : '隐藏'}</button>
         <button class="btn btn-ghost btn-sm" type="button" data-action="edit">编辑</button>
         <button class="btn btn-ghost btn-sm btn-danger" type="button" data-action="delete">删除</button>
       </td>
@@ -231,6 +232,7 @@ function renderRows() {
       const action = event.target?.dataset?.action ?? 'detail';
       if (action === 'detail') return openDetail(agent.id);
       if (action === 'edit') return startEdit(agent.id);
+      if (action === 'visibility') return toggleAgentVisibility(agent, event.target);
       if (action === 'delete') return confirmDelete(event.target, agent);
       if (action === 'views') return openViews(agent.id);
     });
@@ -250,6 +252,34 @@ async function loadAgents() {
   }
   renderRows();
   renderFeaturedSettingsOptions();
+}
+
+async function toggleAgentVisibility(agent, button) {
+  if (button.disabled || !state.session.user?.isAdmin) return;
+  const status = agent.status === 'inactive' ? 'active' : 'inactive';
+  button.disabled = true;
+  button.textContent = '保存中…';
+  try {
+    const result = await fetchJson(`/api/agents/${encodeURIComponent(agent.id)}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
+    if (!result.ok || result.data?.item?.status !== status) {
+      toast(result.status === 403 ? '当前账号没有修改权限' : '展示状态更新失败，请刷新确认后重试', 'error');
+      return;
+    }
+    Object.assign(agent, { status, updatedAt: result.data.item.updatedAt });
+    state.items = state.items.map((item) => item.id === agent.id ? { ...item, status, updatedAt: agent.updatedAt } : item);
+    renderRows();
+    renderFeaturedSettingsOptions();
+    toast(`${status === 'inactive' ? '已隐藏' : '已显示'}：${agent.name}`);
+  } catch {
+    toast('无法连接后端服务，请刷新确认展示状态', 'error');
+  } finally {
+    button.disabled = false;
+    button.textContent = agent.status === 'inactive' ? '显示' : '隐藏';
+  }
 }
 
 /* ---------------- 热门案例展示位 ---------------- */
@@ -312,7 +342,7 @@ function renderFeaturedSettingsOptions() {
     for (const agent of state.items) {
       const option = document.createElement('option');
       option.value = agent.id;
-      option.textContent = `${agent.name}${agent.status === 'inactive' ? '（未启用）' : ''}`;
+      option.textContent = `${agent.name}${agent.status === 'inactive' ? '（已隐藏）' : ''}`;
       select.appendChild(option);
     }
 
@@ -516,7 +546,7 @@ function renderDetailBody(agent) {
     ['具体专业', agent.major || '—'],
     ['课程名称', agent.courseName || '—'],
     ['所属学校', agent.schoolName || '—'],
-    ['状态', agent.status === 'inactive' ? '未启用' : '已启用'],
+    ['展示状态', agent.status === 'inactive' ? '已隐藏' : '展示中'],
     ['ID', agent.id],
     ['更新时间', formatTime(agent.updatedAt)],
     ...(agent.createdAt ? [['创建时间', formatTime(agent.createdAt)]] : [])

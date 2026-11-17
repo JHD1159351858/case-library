@@ -1259,6 +1259,64 @@ function saveFeatured(base, cookie, agentIds) {
   });
 }
 
+test('展示隐藏：状态切换持久保存，普通访客不可查询隐藏案例，管理员可维护并恢复展示', async () => {
+  await withEnvironment(async ({ base, center, site }) => {
+    const admin = await login({ base, center }, 'admin');
+    const student = await login({ base, center }, 'student');
+    const target = await createFeaturedCase(base, admin.cookie, '待隐藏案例', {
+      summary: '保留简介', painPoint: '保留痛点', data: { 说明: '保留扩展字段' }
+    });
+    const visible = await createFeaturedCase(base, admin.cookie, '继续展示案例');
+    await saveFeatured(base, admin.cookie, [target.id, null, visible.id]);
+    const url = `${base}/api/agents/${target.id}`;
+    const patch = (status, cookie) => getJson(url, {
+      method: 'PATCH', headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify({ status })
+    });
+    assert.equal((await patch('inactive')).status, 401);
+    assert.equal((await patch('inactive', student.cookie)).status, 403);
+    const hidden = await patch('inactive', admin.cookie);
+    assert.equal(hidden.status, 200, hidden.text);
+    assert.equal(site.db.findAgentById(target.id).status, 'inactive');
+    assert.deepEqual({ ...hidden.body.item, updatedAt: target.updatedAt }, { ...target, status: 'inactive' },
+      '只切换展示状态，保留案例全部内容');
+
+    for (const headers of [{}, { cookie: student.cookie }]) {
+      for (const query of ['', '?status=inactive', '?status=active', `?q=${encodeURIComponent(target.name)}`]) {
+        const list = await getJson(`${base}/api/agents${query}`, { headers });
+        assert.equal(list.status, 200, list.text);
+        assert.equal(list.body.items.some((item) => item.id === target.id), false, query);
+        assert.ok(list.body.items.every((item) => item.status === 'active'));
+        assert.equal(list.body.total, query.startsWith('?q=') ? 0 : 1);
+      }
+      assert.equal((await getJson(url, { headers })).status, 404);
+      assert.equal((await recordView(base, target.id, headers)).status, 404);
+      const featured = await getJson(`${base}/api/featured-agents`, { headers });
+      assert.deepEqual(featured.body.agentIds, [target.id, null, visible.id], '隐藏不清除已保存的置顶位');
+      assert.deepEqual(featured.body.items.map((item) => [item.id, item.position]), [[visible.id, 3]],
+        '隐藏置顶案例留空，不补位、不移动其他展示位');
+    }
+    assert.equal(site.db.agentViewStats(target.id).viewCount, 0);
+    const adminHeaders = { cookie: admin.cookie };
+    const adminList = await getJson(`${base}/api/agents`, { headers: adminHeaders });
+    assert.equal(adminList.body.total, 2);
+    const inactive = await getJson(`${base}/api/agents?status=inactive`, { headers: adminHeaders });
+    assert.deepEqual(inactive.body.items.map((item) => item.id), [target.id]);
+    assert.equal((await getJson(url, { headers: adminHeaders })).status, 200);
+    const adminView = await recordView(base, target.id, adminHeaders);
+    assert.deepEqual(adminView.body, { ok: true, recorded: false });
+    assert.equal((await getJson(`${base}/api/featured-agents`, { headers: adminHeaders })).body.items.length, 2);
+
+    const restored = await patch('active', admin.cookie);
+    assert.equal(restored.status, 200, restored.text);
+    assert.deepEqual({ ...restored.body.item, updatedAt: target.updatedAt }, target);
+    assert.equal((await getJson(url)).status, 200);
+    assert.equal((await getJson(`${base}/api/agents`)).body.total, 2);
+    assert.deepEqual((await getJson(`${base}/api/featured-agents`)).body.items.map((item) => [item.id, item.position]),
+      [[target.id, 1], [visible.id, 3]]);
+  });
+});
+
 test('热门展示位：首次公开读取未配置，管理员可保存空位和停用案例', async () => {
   await withEnvironment(async ({ base, center }) => {
     const initial = await getJson(`${base}/api/featured-agents`);
@@ -1282,7 +1340,9 @@ test('热门展示位：首次公开读取未配置，管理员可保存空位�
       [third.id, 3, { viewCount: 0 }]
     ]);
     assert.ok(Number.isInteger(saved.body.updatedAt));
-    assert.deepEqual((await getJson(`${base}/api/featured-agents`)).body, saved.body);
+    assert.deepEqual((await getJson(`${base}/api/featured-agents`, { headers: { cookie } })).body, saved.body);
+    const publicRead = await getJson(`${base}/api/featured-agents`);
+    assert.deepEqual(publicRead.body, { ...saved.body, items: saved.body.items.filter((item) => item.status === 'active') });
 
     const empty = await saveFeatured(base, cookie, [null, null, null]);
     assert.equal(empty.status, 200, empty.text);

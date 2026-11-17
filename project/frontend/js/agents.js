@@ -24,7 +24,7 @@ const state = {
   session: { user: null, ssoEnabled: false, backendReady: false },
   items: [],
   page: 1,
-  pageSize: 6,
+  pageSize: 50,
   total: 0,
   loading: false,
   query: '',
@@ -59,7 +59,7 @@ function renderMeta() {
     meta.innerHTML = `后端服务未连接，当前展示 <strong>${state.total}</strong> 条内置演示数据。请通过 <code>http://127.0.0.1:2001/</code> 访问以查询真实数据。`;
     return;
   }
-  const filters = [state.discipline, state.school, state.status === 'inactive' ? '未启用' : state.status === 'active' ? '已启用' : '']
+  const filters = [state.discipline, state.school, state.status === 'inactive' ? '已隐藏' : state.status === 'active' ? '展示中' : '']
     .filter(Boolean)
     .join(' / ');
   const condition = [state.query ? `关键词 <code>${escapeHtml(state.query)}</code>` : '', filters ? `筛选 <code>${escapeHtml(filters)}</code>` : '']
@@ -131,7 +131,7 @@ function renderCard(agent) {
     <p class="agent-card-summary">${escapeHtml(agent.summary || '暂无简介')}</p>
     ${renderCardMeta(agent)}
     <div class="agent-card-foot">
-      <span class="status-dot" data-status="${escapeHtml(agent.status || 'active')}">${agent.status === 'inactive' ? '未启用' : '已启用'}</span>
+      <span class="status-dot" data-status="${escapeHtml(agent.status || 'active')}">${agent.status === 'inactive' ? '已隐藏' : '展示中'}</span>
       <span class="agent-card-time">${formatTime(agent.updatedAt)}</span>
     </div>
     ${
@@ -196,7 +196,7 @@ function renderDetailBody(agent) {
     ['具体专业', agent.major || '—'],
     ['课程名称', agent.courseName || '—'],
     ['所属学校', agent.schoolName || '—'],
-    ['状态', agent.status === 'inactive' ? '未启用' : '已启用'],
+    ['展示状态', agent.status === 'inactive' ? '已隐藏' : '展示中'],
     ['ID', agent.id],
     ['更新时间', formatTime(agent.updatedAt)],
     ...(agent.createdAt ? [['创建时间', formatTime(agent.createdAt)]] : [])
@@ -441,6 +441,7 @@ async function loadAgents() {
 /** 加载筛选选项（来自现有数据的学科 / 学校聚合） */
 async function loadFilterOptions() {
   const bar = $('filter-bar');
+  if ($('filter-visibility')) $('filter-visibility').hidden = !state.session.user?.isAdmin;
   let stats = null;
   try {
     const { ok, data } = await fetchJson('/api/agents/stats');

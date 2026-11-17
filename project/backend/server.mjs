@@ -929,7 +929,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     return sendJson(response, 200, saved);
   }
 
-  async function featuredAgentsPayload(settings = null) {
+  async function featuredAgentsPayload(settings = null, includeHidden = false) {
     const saved = settings ?? await db.featuredAgentSettings();
     const agentIds = [...saved.agentIds];
     const items = [];
@@ -941,6 +941,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
         agentIds[index] = null;
         continue;
       }
+      if (row.status === 'inactive' && !includeHidden) continue;
       const stats = await db.agentViewStats(agentId);
       items.push({ ...agentSummary(row), position: index + 1, viewStats: { viewCount: stats.viewCount } });
     }
@@ -953,7 +954,8 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
   }
 
   async function handleFeaturedAgents(request, response) {
-    return sendJson(response, 200, await featuredAgentsPayload());
+    const user = await currentUser(request);
+    return sendJson(response, 200, await featuredAgentsPayload(null, user && computeIsAdmin(user, config)));
   }
 
   async function handleSaveFeaturedAgents(request, response) {
@@ -982,19 +984,19 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
       }
     }
     const saved = await db.saveFeaturedAgentSettings(agentIds, now());
-    return sendJson(response, 200, await featuredAgentsPayload(saved));
+    return sendJson(response, 200, await featuredAgentsPayload(saved, true));
   }
 
   async function handleListAgents(request, response, url) {
+    const user = await currentUser(request);
+    const isAdmin = user && computeIsAdmin(user, config);
     const keyword = url.searchParams.get('q') ?? '';
     const discipline = url.searchParams.get('discipline') ?? '';
     const school = url.searchParams.get('school') ?? '';
-    const status = url.searchParams.get('status') ?? '';
+    const status = isAdmin ? url.searchParams.get('status') ?? '' : 'active';
     const limit = Number.parseInt(url.searchParams.get('limit') ?? '100', 10);
     const offset = Number.parseInt(url.searchParams.get('offset') ?? '0', 10);
     const { items, total } = await db.listAgents({ query: keyword, discipline, school, status, limit, offset });
-    const user = await currentUser(request);
-    const isAdmin = user && computeIsAdmin(user, config);
     const viewStats = await db.agentViewStatsForAgents(items.map((item) => item.id));
     return sendJson(response, 200, {
       items: items.map((row) => {
@@ -1078,6 +1080,10 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
   async function handleAgentDetail(request, response, agentId) {
     const row = await db.findAgentById(agentId);
     if (!row) return sendJson(response, 404, { error: 'agent_not_found' });
+    const user = await currentUser(request);
+    if (row.status === 'inactive' && !(user && computeIsAdmin(user, config))) {
+      return sendJson(response, 404, { error: 'agent_not_found' });
+    }
     return sendJson(response, 200, { item: agentDetail(row) });
   }
 
@@ -1141,7 +1147,8 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
   /** 前台详情打开后显式记一次浏览；管理员维护与详情读取本身不计数。 */
   async function handleRecordAgentView(request, response, agentId) {
     request.resume(); // 不读取客户端身份字段，只消费并丢弃请求体。
-    if (!(await db.findAgentById(agentId))) return sendJson(response, 404, { error: 'agent_not_found' });
+    const row = await db.findAgentById(agentId);
+    if (!row) return sendJson(response, 404, { error: 'agent_not_found' });
     const origin = request.headers.origin;
     const fetchSite = String(request.headers['sec-fetch-site'] ?? '').toLowerCase();
     if ((origin !== undefined && safeOrigin(origin) !== safeOrigin(publicBase(request)))
@@ -1150,6 +1157,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     }
     const user = await currentUser(request);
     if (user && computeIsAdmin(user, config)) return sendJson(response, 200, { ok: true, recorded: false });
+    if (row.status === 'inactive') return sendJson(response, 404, { error: 'agent_not_found' });
 
     let visitorKey;
     if (user) {

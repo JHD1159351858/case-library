@@ -55,6 +55,7 @@ function page(name, overrides = {}) {
     (name === 'admin' ? ', uploadCover, resetForm, fillForm, startEdit, submitForm' : ', selectPopularAgents, loadPopularAgents, loadAgents, loadCardEffects, renderCard, renderGrid, bindSearch, bindFilters, bindPagination, renderPagination') + ' };', context);
   runInContext('Object.assign(api, { loadFeaturedAgents: typeof loadFeaturedAgents === "function" ? loadFeaturedAgents : undefined, loadFeaturedSettings: typeof loadFeaturedSettings === "function" ? loadFeaturedSettings : undefined, initFeaturedSettings: typeof initFeaturedSettings === "function" ? initFeaturedSettings : undefined, saveFeaturedSettings: typeof saveFeaturedSettings === "function" ? saveFeaturedSettings : undefined });', context);
   runInContext('Object.assign(api, { loadSiteStats: typeof loadSiteStats === "function" ? loadSiteStats : undefined });', context);
+  if (name === 'admin') runInContext('Object.assign(api, { renderRows, toggleAgentVisibility: typeof toggleAgentVisibility === "function" ? toggleAgentVisibility : undefined });', context);
   if (name === 'admin') runInContext('renderRows = () => {}; loadAgents = async () => {}; loadStats = async () => {};', context);
   if (name === 'admin') runInContext('Object.assign(api, { renderViewCell: typeof renderViewCell === "function" ? renderViewCell : undefined, openViews: typeof openViews === "function" ? openViews : undefined });', context);
   if (name === 'admin') {
@@ -112,6 +113,82 @@ for (const mode of ['尚未配置', '请求失败']) {
     assert.deepEqual([...result.keys()], ['higher', 'lower']);
   });
 }
+
+test('案例展示：每条记录有显示或隐藏按钮，点击后仅保存展示状态', async () => {
+  const calls = [];
+  const rows = [];
+  const { api, get, document } = page('admin', { fetchJson: async (url, options) => {
+    calls.push([url, options.method, JSON.parse(options.body)]);
+    return { ok: true, data: { item: { id: 'visible', status: 'inactive', updatedAt: 10 } } };
+  } });
+  api.state.items = [{ id: 'visible', name: '展示案例', status: 'active' }, { id: 'hidden', name: '隐藏案例', status: 'inactive' }];
+  document.createElement = () => ({ ...element(), classList: { add() {} } });
+  get('agent-rows').appendChild = (row) => rows.push(row);
+  api.renderRows();
+  assert.match(rows[0].innerHTML, /展示中/);
+  assert.match(rows[0].innerHTML, /data-action="visibility">隐藏<\/button>/);
+  assert.match(rows[1].innerHTML, /已隐藏/);
+  assert.match(rows[1].innerHTML, /data-action="visibility">显示<\/button>/);
+  const button = { ...element(), dataset: { action: 'visibility' } };
+  await rows[0].dispatch('click', { target: button });
+  assert.deepEqual(calls, [['/api/agents/visible', 'PATCH', { status: 'inactive' }]]);
+  assert.equal(api.state.items[0].status, 'inactive');
+});
+
+for (const [before, after, action] of [['active', 'inactive', '隐藏'], ['inactive', 'active', '显示']]) {
+  test(`案例展示：${action}成功后更新状态和按钮，保留其他字段`, async () => {
+    const messages = [];
+    const { api } = page('admin', { toast: (message) => messages.push(message), fetchJson: async (_url, options) => {
+      assert.deepEqual(JSON.parse(options.body), { status: after });
+      return { ok: true, data: { item: { id: 'a', status: after, updatedAt: 20 } } };
+    } });
+    const agent = { id: 'a', name: '案例', status: before, summary: '保留简介' };
+    api.state.items = [agent];
+    const button = element();
+    await api.toggleAgentVisibility(agent, button);
+    assert.equal(api.state.items[0].status, after);
+    assert.equal(api.state.items[0].updatedAt, 20);
+    assert.equal(api.state.items[0].summary, '保留简介');
+    assert.equal(button.disabled, false);
+    assert.equal(button.textContent, after === 'inactive' ? '显示' : '隐藏');
+    assert.match(messages.at(-1), new RegExp(`已${action}`));
+  });
+}
+
+test('案例展示：请求期间禁用按钮，连续点击只保存一次', async () => {
+  const pending = deferred();
+  let requests = 0;
+  const { api } = page('admin', { fetchJson: () => { requests++; return pending.promise; } });
+  const agent = { id: 'a', name: '案例', status: 'active' };
+  api.state.items = [agent];
+  const button = element();
+  const saving = api.toggleAgentVisibility(agent, button);
+  assert.equal(button.disabled, true);
+  assert.equal(agent.status, 'active', '保存完成前不提前改变状态');
+  await api.toggleAgentVisibility(agent, button);
+  assert.equal(requests, 1);
+  pending.resolve({ ok: true, data: { item: { id: 'a', status: 'inactive', updatedAt: 20 } } });
+  await saving;
+  assert.equal(button.disabled, false);
+});
+
+test('案例展示：保存失败、响应未确认或断网时保留原状态并恢复操作', async () => {
+  for (const result of [{ ok: false, status: 403 }, { ok: false, status: 500 }, { ok: true, data: {} }, new Error('offline')]) {
+    const messages = [];
+    const { api } = page('admin', { toast: (message) => messages.push(message), fetchJson: async () => {
+      if (result instanceof Error) throw result;
+      return result;
+    } });
+    const agent = { id: 'a', name: '案例', status: 'active' };
+    api.state.items = [agent];
+    const button = element();
+    await api.toggleAgentVisibility(agent, button);
+    assert.equal(api.state.items[0].status, 'active');
+    assert.equal(button.disabled, false);
+    assert.equal(button.textContent, '隐藏');
+    assert.match(messages.at(-1), /失败|无法|权限|确认/);
+  }
+});
 
 test('置顶后台：保存三个展示位并显示成功，保留空位', async () => {
   const writes = [];
@@ -278,33 +355,33 @@ function paginatedPage(items, overrides = {}) {
   return { ...result, calls };
 }
 
-test('查询分页：每页六条，服务端总数与显示范围正确，翻页始终使用全库热门排行', async () => {
-  const { api, get, calls } = paginatedPage(paginationItems());
+test('查询分页：每页最多50条，服务端总数与显示范围正确，翻页始终使用全库热门排行', async () => {
+  const { api, get, calls } = paginatedPage(paginationItems(101));
   api.bindPagination();
   await api.loadAgents();
   assert.equal(api.state.page, 1);
-  assert.equal(api.state.total, 13);
-  assert.equal(api.state.items.length, 6);
-  assert.deepEqual(calls, ['/api/agents?limit=6&offset=0', '/api/agents?limit=500&offset=6']);
-  assert.match(get('result-meta').innerHTML, /<strong>13<\/strong>/);
+  assert.equal(api.state.total, 101);
+  assert.equal(api.state.items.length, 50);
+  assert.deepEqual(calls, ['/api/agents?limit=50&offset=0', '/api/agents?limit=500&offset=50']);
+  assert.match(get('result-meta').innerHTML, /<strong>101<\/strong>/);
   assert.match(get('agents-page-info').textContent, /第 1 \/ 3 页/);
-  assert.match(get('agents-page-info').textContent, /显示 1–6 条/);
+  assert.match(get('agents-page-info').textContent, /显示 1–50 条/);
   assert.equal(get('agents-prev').disabled, true);
   assert.equal(get('agents-next').disabled, false);
   const ranks = [...api.state.popular.keys()];
-  assert.deepEqual(ranks, ['page-13', 'page-12', 'page-11']);
+  assert.deepEqual(ranks, ['page-101', 'page-100', 'page-99']);
 
   await get('agents-next').dispatch('click');
   assert.equal(api.state.page, 2);
-  assert.deepEqual(Array.from(api.state.items, (item) => item.id), ['page-7', 'page-8', 'page-9', 'page-10', 'page-11', 'page-12']);
-  assert.match(get('agents-page-info').textContent, /显示 7–12 条/);
-  assert.deepEqual(calls.slice(-2), ['/api/agents?limit=6&offset=6', '/api/agents?limit=500&offset=0']);
+  assert.deepEqual(Array.from(api.state.items, (item) => item.id), Array.from({ length: 50 }, (_, index) => `page-${index + 51}`));
+  assert.match(get('agents-page-info').textContent, /显示 51–100 条/);
+  assert.deepEqual(calls.slice(-2), ['/api/agents?limit=50&offset=50', '/api/agents?limit=500&offset=0']);
   assert.deepEqual([...api.state.popular.keys()], ranks);
 
   await get('agents-next').dispatch('click');
   assert.equal(api.state.items.length, 1);
-  assert.equal(api.state.items[0].id, 'page-13');
-  assert.match(get('agents-page-info').textContent, /显示 13–13 条/);
+  assert.equal(api.state.items[0].id, 'page-101');
+  assert.match(get('agents-page-info').textContent, /显示 101–101 条/);
   assert.equal(get('agents-next').disabled, true);
   await get('agents-prev').dispatch('click');
   assert.equal(api.state.page, 2);
@@ -338,7 +415,7 @@ test('查询分页：筛选首批仅决定匹配总数，不能复用为全库�
     const params = new URL(url, 'http://test').searchParams;
     assert.equal(params.get('q'), '课程');
     assert.equal(params.get('discipline'), '工学');
-    assert.equal(params.get('limit'), '6');
+    assert.equal(params.get('limit'), '50');
     assert.equal(params.get('offset'), '0');
     return { ok: true, json: async () => ({ total: 2, items: items.slice(0, 2) }) };
   } });
@@ -354,11 +431,11 @@ test('查询分页：筛选首批仅决定匹配总数，不能复用为全库�
 test('查询分页：请求期间双按钮禁用，重复点击不发新请求', async () => {
   const pending = deferred();
   let requests = 0;
-  const items = paginationItems();
+  const items = paginationItems(101);
   const { api, get } = paginatedPage(items, {
     fetch: () => { requests += 1; return pending.promise; }
   });
-  api.state.total = 13;
+  api.state.total = 101;
   api.bindPagination();
   const load = get('agents-next').dispatch('click');
   assert.equal(api.state.page, 2);
@@ -368,7 +445,7 @@ test('查询分页：请求期间双按钮禁用，重复点击不发新请求',
   get('agents-next').dispatch('click');
   get('agents-prev').dispatch('click');
   assert.equal(requests, 1);
-  pending.resolve({ ok: true, json: async () => ({ total: 13, items: items.slice(6, 12) }) });
+  pending.resolve({ ok: true, json: async () => ({ total: 101, items: items.slice(50, 100) }) });
   await load;
   assert.equal(api.state.loading, false);
   assert.equal(get('agents-prev').disabled, false);
@@ -376,14 +453,14 @@ test('查询分页：请求期间双按钮禁用，重复点击不发新请求',
 });
 
 test('查询分页：列表缩减时回合法末页并重新取数据，空结果隐藏分页', async () => {
-  const items = paginationItems(7);
+  const items = paginationItems(51);
   const { api, get, calls } = paginatedPage(items);
   api.state.page = 3;
   await api.loadAgents();
   assert.equal(api.state.page, 2);
-  assert.equal(api.state.total, 7);
-  assert.equal(api.state.items[0].id, 'page-7');
-  assert.deepEqual(calls.slice(0, 2), ['/api/agents?limit=6&offset=12', '/api/agents?limit=6&offset=6']);
+  assert.equal(api.state.total, 51);
+  assert.equal(api.state.items[0].id, 'page-51');
+  assert.deepEqual(calls.slice(0, 2), ['/api/agents?limit=50&offset=100', '/api/agents?limit=50&offset=50']);
   assert.match(get('agents-page-info').textContent, /第 2 \/ 2 页/);
   assert.equal(get('agents-next').disabled, true);
   const empty = paginatedPage([]);
@@ -395,45 +472,45 @@ test('查询分页：列表缩减时回合法末页并重新取数据，空结�
 test('查询分页：旧页慢响应不覆盖新页、真实总数或全局排行', async () => {
   const pending = [deferred(), deferred()];
   let index = 0;
-  const items = paginationItems(12);
+  const items = paginationItems(100);
   const { api, get, calls } = paginatedPage(items, { fetch: () => pending[index++].promise });
   const first = api.loadAgents();
   api.state.page = 2;
   const second = api.loadAgents();
-  pending[1].resolve({ ok: true, json: async () => ({ total: 12, items: items.slice(6) }) });
+  pending[1].resolve({ ok: true, json: async () => ({ total: 100, items: items.slice(50) }) });
   await second;
   pending[0].resolve({ ok: true, json: async () => ({ total: 99, items: [{ id: 'stale', name: '旧案例', viewStats: { viewCount: 999 } }] }) });
   await first;
   assert.equal(api.state.page, 2);
-  assert.equal(api.state.total, 12);
-  assert.equal(api.state.items[0].id, 'page-7');
+  assert.equal(api.state.total, 100);
+  assert.equal(api.state.items[0].id, 'page-51');
   assert.equal(api.state.popular.has('stale'), false);
   assert.deepEqual(calls, ['/api/agents?limit=500&offset=0']);
   assert.match(get('agents-page-info').textContent, /第 2 \/ 2 页/);
   assert.equal(api.state.loading, false);
 });
 
-test('查询分页：离线示例按六条切页，超页自动夹紧，搜索后回首屏并更新总数', async () => {
+test('查询分页：离线示例按50条切页，超页自动夹紧，搜索后回首屏并更新总数', async () => {
   const { api, context, get } = paginatedPage([], { fetch: async () => { throw new Error('offline'); } });
-  context.DEMO_AGENTS = paginationItems();
+  context.DEMO_AGENTS = paginationItems(101);
   api.bindSearch();
   api.state.page = 2;
   await api.loadAgents();
   assert.equal(api.state.usingDemo, true);
-  assert.equal(api.state.items[0].id, 'page-7');
-  assert.equal(api.state.items.length, 6);
-  assert.equal(api.state.total, 13);
+  assert.equal(api.state.items[0].id, 'page-51');
+  assert.equal(api.state.items.length, 50);
+  assert.equal(api.state.total, 101);
   assert.equal(api.state.popular.size, 0);
-  assert.match(get('result-meta').innerHTML, /<strong>13<\/strong>/);
+  assert.match(get('result-meta').innerHTML, /<strong>101<\/strong>/);
   api.state.page = 5;
   await api.loadAgents();
   assert.equal(api.state.page, 3);
   assert.equal(api.state.items.length, 1);
-  get('search-input').value = '第13条';
+  get('search-input').value = '第101条';
   await get('search-form').dispatch('submit');
   assert.equal(api.state.page, 1);
   assert.equal(api.state.total, 1);
-  assert.equal(api.state.items[0].id, 'page-13');
+  assert.equal(api.state.items[0].id, 'page-101');
   assert.equal(get('agents-next').disabled, true);
 });
 
