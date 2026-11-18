@@ -1289,7 +1289,7 @@ test('拖动排序：保存后全局排序再分页筛选，隐藏案例仍隐�
     assert.deepEqual(agents.map((agent) => ({ ...site.db.findAgentById(agent.id) })), before);
     assert.deepEqual((await getJson(`${base}/api/featured-agents`)).body, featuredBefore);
 
-    const adminList = await getJson(`${base}/api/agents`, { headers: { cookie } });
+    const adminList = await getJson(`${base}/api/agents?includeHidden=1`, { headers: { cookie } });
     assert.deepEqual(adminList.body.items.map((item) => item.id), agentIds);
     assert.equal(adminList.body.manualOrder, true);
     const firstPage = await getJson(`${base}/api/agents?limit=2&offset=0`);
@@ -1341,7 +1341,7 @@ test('拖动排序：仅同源管理员可保存，非法输入和错误方法�
   });
 });
 
-test('展示隐藏：状态切换持久保存，普通访客不可查询隐藏案例，管理员可维护并恢复展示', async () => {
+test('展示隐藏：查询页对所有账号隐藏案例，管理端可维护并恢复展示', async () => {
   await withEnvironment(async ({ base, center, site }) => {
     const admin = await login({ base, center }, 'admin');
     const student = await login({ base, center }, 'student');
@@ -1363,7 +1363,8 @@ test('展示隐藏：状态切换持久保存，普通访客不可查询隐藏�
     assert.deepEqual({ ...hidden.body.item, updatedAt: target.updatedAt }, { ...target, status: 'inactive' },
       '只切换展示状态，保留案例全部内容');
 
-    for (const headers of [{}, { cookie: student.cookie }]) {
+    const adminHeaders = { cookie: admin.cookie };
+    for (const headers of [{}, { cookie: student.cookie }, adminHeaders]) {
       for (const query of ['', '?status=inactive', '?status=active', `?q=${encodeURIComponent(target.name)}`]) {
         const list = await getJson(`${base}/api/agents${query}`, { headers });
         assert.equal(list.status, 200, list.text);
@@ -1372,22 +1373,26 @@ test('展示隐藏：状态切换持久保存，普通访客不可查询隐藏�
         assert.equal(list.body.total, query.startsWith('?q=') ? 0 : 1);
       }
       assert.equal((await getJson(url, { headers })).status, 404);
-      assert.equal((await recordView(base, target.id, headers)).status, 404);
       const featured = await getJson(`${base}/api/featured-agents`, { headers });
       assert.deepEqual(featured.body.agentIds, [target.id, null, visible.id], '隐藏不清除已保存的置顶位');
       assert.deepEqual(featured.body.items.map((item) => [item.id, item.position]), [[visible.id, 3]],
         '隐藏置顶案例留空，不补位、不移动其他展示位');
     }
+    for (const headers of [{}, { cookie: student.cookie }]) {
+      assert.equal((await recordView(base, target.id, headers)).status, 404);
+      assert.deepEqual((await getJson(`${base}/api/agents?includeHidden=1`, { headers })).body.items.map(item => item.id), [visible.id]);
+      assert.equal((await getJson(`${url}?includeHidden=1`, { headers })).status, 404);
+      assert.deepEqual((await getJson(`${base}/api/featured-agents?includeHidden=1`, { headers })).body.items.map(item => item.id), [visible.id]);
+    }
     assert.equal(site.db.agentViewStats(target.id).viewCount, 0);
-    const adminHeaders = { cookie: admin.cookie };
-    const adminList = await getJson(`${base}/api/agents`, { headers: adminHeaders });
+    const adminList = await getJson(`${base}/api/agents?includeHidden=1`, { headers: adminHeaders });
     assert.equal(adminList.body.total, 2);
-    const inactive = await getJson(`${base}/api/agents?status=inactive`, { headers: adminHeaders });
+    const inactive = await getJson(`${base}/api/agents?includeHidden=1&status=inactive`, { headers: adminHeaders });
     assert.deepEqual(inactive.body.items.map((item) => item.id), [target.id]);
-    assert.equal((await getJson(url, { headers: adminHeaders })).status, 200);
+    assert.equal((await getJson(`${url}?includeHidden=1`, { headers: adminHeaders })).status, 200);
     const adminView = await recordView(base, target.id, adminHeaders);
     assert.deepEqual(adminView.body, { ok: true, recorded: false });
-    assert.equal((await getJson(`${base}/api/featured-agents`, { headers: adminHeaders })).body.items.length, 2);
+    assert.equal((await getJson(`${base}/api/featured-agents?includeHidden=1`, { headers: adminHeaders })).body.items.length, 2);
 
     const restored = await patch('active', admin.cookie);
     assert.equal(restored.status, 200, restored.text);
@@ -1422,7 +1427,7 @@ test('热门展示位：首次公开读取未配置，管理员可保存空位�
       [third.id, 3, { viewCount: 0 }]
     ]);
     assert.ok(Number.isInteger(saved.body.updatedAt));
-    assert.deepEqual((await getJson(`${base}/api/featured-agents`, { headers: { cookie } })).body, saved.body);
+    assert.deepEqual((await getJson(`${base}/api/featured-agents?includeHidden=1`, { headers: { cookie } })).body, saved.body);
     const publicRead = await getJson(`${base}/api/featured-agents`);
     assert.deepEqual(publicRead.body, { ...saved.body, items: saved.body.items.filter((item) => item.status === 'active') });
 

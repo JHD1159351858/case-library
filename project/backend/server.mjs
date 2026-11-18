@@ -953,8 +953,8 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     };
   }
 
-  async function handleFeaturedAgents(request, response) {
-    const user = await currentUser(request);
+  async function handleFeaturedAgents(request, response, url) {
+    const user = url.searchParams.get('includeHidden') === '1' ? await currentUser(request) : null;
     return sendJson(response, 200, await featuredAgentsPayload(null, user && computeIsAdmin(user, config)));
   }
 
@@ -1032,7 +1032,8 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     const keyword = url.searchParams.get('q') ?? '';
     const discipline = url.searchParams.get('discipline') ?? '';
     const school = url.searchParams.get('school') ?? '';
-    const status = isAdmin ? url.searchParams.get('status') ?? '' : 'active';
+    const includeHidden = isAdmin && url.searchParams.get('includeHidden') === '1';
+    const status = includeHidden ? url.searchParams.get('status') ?? '' : 'active';
     const limit = Number.parseInt(url.searchParams.get('limit') ?? '100', 10);
     const offset = Number.parseInt(url.searchParams.get('offset') ?? '0', 10);
     const { items, total } = await db.listAgents({ query: keyword, discipline, school, status, limit, offset });
@@ -1118,12 +1119,12 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
     return sendJson(response, 200, { ok: true, recorded: true });
   }
 
-  async function handleAgentDetail(request, response, agentId) {
+  async function handleAgentDetail(request, response, url, agentId) {
     const row = await db.findAgentById(agentId);
     if (!row) return sendJson(response, 404, { error: 'agent_not_found' });
-    const user = await currentUser(request);
-    if (row.status === 'inactive' && !(user && computeIsAdmin(user, config))) {
-      return sendJson(response, 404, { error: 'agent_not_found' });
+    if (row.status === 'inactive') {
+      const user = url.searchParams.get('includeHidden') === '1' ? await currentUser(request) : null;
+      if (!user || !computeIsAdmin(user, config)) return sendJson(response, 404, { error: 'agent_not_found' });
     }
     return sendJson(response, 200, { item: agentDetail(row) });
   }
@@ -1450,7 +1451,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
         return sendJson(response, 405, { error: 'method_not_allowed' });
       }
       if (pathname === '/api/featured-agents') {
-        if (method === 'GET') return await handleFeaturedAgents(request, response);
+        if (method === 'GET') return await handleFeaturedAgents(request, response, requestUrl);
         if (method === 'POST') return await handleSaveFeaturedAgents(request, response);
         response.setHeader('Allow', 'GET, POST');
         return sendJson(response, 405, { error: 'method_not_allowed' });
@@ -1511,7 +1512,7 @@ export function createRequestHandler({ db, config, fetchImpl = fetch, now = Date
         } catch {
           return sendJson(response, 400, { error: 'bad_path' });
         }
-        if (method === 'GET') return await handleAgentDetail(request, response, agentId);
+        if (method === 'GET') return await handleAgentDetail(request, response, requestUrl, agentId);
         if (method === 'PUT' || method === 'PATCH') return await handleUpdateAgent(request, response, agentId);
         if (method === 'DELETE') return await handleDeleteAgent(request, response, agentId);
         return sendJson(response, 405, { error: 'method_not_allowed' });

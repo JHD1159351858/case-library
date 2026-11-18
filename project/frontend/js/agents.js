@@ -3,7 +3,7 @@
  *
  * 数据流：
  *   1. 首屏调 /api/agents 拉取列表（后端不可用则回退内置演示数据并显著提示）
- *   2. 搜索 / 筛选（学科 / 学校 / 状态）→ 服务端过滤（?q=&discipline=&school=&status=）
+ *   2. 搜索 / 筛选（学科 / 学校）→ 服务端过滤（?q=&discipline=&school=）
  *   3. 筛选下拉选项来自 /api/agents/stats（取现有数据中的学科与学校）
  *   4. 点击卡片 → 弹窗展示完整明细（痛点 / 使用说明 / 扩展字段键值对）
  *
@@ -31,7 +31,6 @@ const state = {
   query: '',
   discipline: '',
   school: '',
-  status: '',
   usingDemo: false,
   popular: new Map(),
   featuredAgents: null,
@@ -60,7 +59,7 @@ function renderMeta() {
     meta.innerHTML = `后端服务未连接，当前展示 <strong>${state.total}</strong> 条内置演示数据。请通过 <code>http://127.0.0.1:2001/</code> 访问以查询真实数据。`;
     return;
   }
-  const filters = [state.discipline, state.school, state.status === 'inactive' ? '已隐藏' : state.status === 'active' ? '展示中' : '']
+  const filters = [state.discipline, state.school]
     .filter(Boolean)
     .join(' / ');
   const condition = [state.query ? `关键词 <code>${escapeHtml(state.query)}</code>` : '', filters ? `筛选 <code>${escapeHtml(filters)}</code>` : '']
@@ -172,7 +171,7 @@ function renderGrid() {
     empty.style.gridColumn = '1 / -1';
     empty.innerHTML = `
       <div class="empty-state-title">没有匹配的智能体</div>
-      <p>${state.query || state.discipline || state.school || state.status ? '换个关键词或清空筛选条件查看全部记录。' : '记录尚为空，可在管理端新增第一条智能体信息。'}</p>
+      <p>${state.query || state.discipline || state.school ? '换个关键词或清空筛选条件查看全部记录。' : '暂无展示中的案例。'}</p>
     `;
     grid.appendChild(empty);
     return;
@@ -312,14 +311,11 @@ function closeDetail() {
 
 /* ---------------- 数据加载 ---------------- */
 
-const statusLabel = () => (state.status === 'inactive' ? '未启用' : state.status === 'active' ? '已启用' : '');
-
 function buildQuery() {
   const params = new URLSearchParams();
   if (state.query) params.set('q', state.query);
   if (state.discipline) params.set('discipline', state.discipline);
   if (state.school) params.set('school', state.school);
-  if (state.status) params.set('status', state.status);
   params.set('limit', String(state.pageSize));
   params.set('offset', String((state.page - 1) * state.pageSize));
   return params.toString();
@@ -331,8 +327,7 @@ function matchDemo(agent) {
     !keyword || [agent.name, agent.summary, agent.tags, agent.discipline, agent.schoolName].join(' ').toLowerCase().includes(keyword);
   const hitDiscipline = !state.discipline || agent.discipline === state.discipline;
   const hitSchool = !state.school || agent.schoolName === state.school;
-  const hitStatus = !state.status || (agent.status ?? 'active') === state.status;
-  return hitKeyword && hitDiscipline && hitSchool && hitStatus;
+  return agent.status !== 'inactive' && hitKeyword && hitDiscipline && hitSchool;
 }
 
 function selectPopularAgents(items) {
@@ -391,7 +386,7 @@ async function loadPopularAgents(firstPage = null) {
 async function loadAgents() {
   const requestId = ++state.listRequest;
   const requestedPage = state.page;
-  const unfiltered = !state.query && !state.discipline && !state.school && !state.status;
+  const unfiltered = !state.query && !state.discipline && !state.school;
   state.loading = true;
   renderPagination();
   const grid = $('agent-grid');
@@ -447,7 +442,6 @@ async function loadAgents() {
 /** 加载筛选选项（来自现有数据的学科 / 学校聚合） */
 async function loadFilterOptions() {
   const bar = $('filter-bar');
-  if ($('filter-visibility')) $('filter-visibility').hidden = !state.session.user?.isAdmin;
   let stats = null;
   try {
     const { ok, data } = await fetchJson('/api/agents/stats');
@@ -485,7 +479,7 @@ async function loadFilterOptions() {
 function renderFilterCount() {
   const count = $('filter-count');
   if (!count) return;
-  const activeCount = [state.discipline, state.school, statusLabel()].filter(Boolean).length;
+  const activeCount = [state.discipline, state.school].filter(Boolean).length;
   count.textContent = activeCount ? `已启用 ${activeCount} 个筛选条件` : '';
 }
 
@@ -508,10 +502,8 @@ function bindSearch() {
     state.query = '';
     state.discipline = '';
     state.school = '';
-    state.status = '';
     if ($('filter-discipline')) $('filter-discipline').value = '';
     if ($('filter-school')) $('filter-school').value = '';
-    if ($('filter-status')) $('filter-status').value = '';
     state.page = 1;
     loadAgents();
     input?.focus();
@@ -529,18 +521,11 @@ function bindFilters() {
     state.page = 1;
     return loadAgents();
   });
-  $('filter-status')?.addEventListener('change', (event) => {
-    state.status = event.target.value;
-    state.page = 1;
-    return loadAgents();
-  });
   $('filter-clear')?.addEventListener('click', () => {
     state.discipline = '';
     state.school = '';
-    state.status = '';
     if ($('filter-discipline')) $('filter-discipline').value = '';
     if ($('filter-school')) $('filter-school').value = '';
-    if ($('filter-status')) $('filter-status').value = '';
     state.page = 1;
     return loadAgents();
   });

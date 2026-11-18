@@ -209,6 +209,7 @@ test('拖动排序：后台读取超过500条的全部页，避免只排序首�
   } });
   await api.loadAgents();
   assert.equal(api.state.items.length, 501);
+  assert.ok(calls.every((url) => new URL(url, 'http://test').searchParams.get('includeHidden') === '1'));
   assert.equal(new URL(calls[1], 'http://test').searchParams.get('offset'), '500');
 });
 
@@ -300,7 +301,7 @@ test('案例展示：保存失败、响应未确认或断网时保留原状态�
 test('置顶后台：保存三个展示位并显示成功，保留空位', async () => {
   const writes = [];
   const { api, get } = page('admin', { fetchJson: async (url, options) => {
-    assert.equal(url, '/api/featured-agents');
+    assert.equal(url, options?.method === 'POST' ? '/api/featured-agents' : '/api/featured-agents?includeHidden=1');
     if (options?.method === 'POST') {
       const data = JSON.parse(options.body);
       writes.push(data);
@@ -351,7 +352,7 @@ test('置顶后台：首次读取失败时禁止保存，刷新全部可重试�
   let reads = 0;
   let writes = 0;
   const { api, get } = page('admin', { fetchJson: async (url, options) => {
-    if (url !== '/api/featured-agents') return { ok: true, data: {} };
+    if (!url.startsWith('/api/featured-agents')) return { ok: true, data: {} };
     if (options?.method === 'POST') {
       writes++;
       return { ok: true, data: { configured: true, agentIds: [null, null, null], items: [], updatedAt: 2 } };
@@ -505,7 +506,7 @@ test('查询分页：搜索、重置、全部筛选及清空筛选均回第一�
   for (const [id, event, value] of [
     ['search-form', 'submit', '查询词'], ['search-reset', 'click', ''],
     ['filter-discipline', 'change', '工学'], ['filter-school', 'change', '示例大学'],
-    ['filter-status', 'change', 'active'], ['filter-clear', 'click', '']
+    ['filter-clear', 'click', '']
   ]) {
     api.state.page = 3;
     if (id === 'search-form') get('search-input').value = value;
@@ -513,7 +514,7 @@ test('查询分页：搜索、重置、全部筛选及清空筛选均回第一�
     await get(id).dispatch(event);
     assert.equal(api.state.page, 1, id);
   }
-  assert.deepEqual(pages, [1, 1, 1, 1, 1, 1]);
+  assert.deepEqual(pages, [1, 1, 1, 1, 1]);
 });
 
 test('查询分页：筛选首批仅决定匹配总数，不能复用为全库热门数据', async () => {
@@ -599,7 +600,7 @@ test('查询分页：旧页慢响应不覆盖新页、真实总数或全局排�
 
 test('查询分页：离线示例按50条切页，超页自动夹紧，搜索后回首屏并更新总数', async () => {
   const { api, context, get } = paginatedPage([], { fetch: async () => { throw new Error('offline'); } });
-  context.DEMO_AGENTS = paginationItems(101);
+  context.DEMO_AGENTS = [...paginationItems(101), { id: 'hidden-demo', name: '隐藏示例', status: 'inactive' }];
   api.bindSearch();
   api.state.page = 2;
   await api.loadAgents();

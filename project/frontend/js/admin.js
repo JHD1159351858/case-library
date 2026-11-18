@@ -249,7 +249,7 @@ async function loadAgents() {
     const items = [];
     let total;
     do {
-      const response = await fetch(`/api/agents?limit=500${items.length ? `&offset=${items.length}` : ''}`, { credentials: 'same-origin', headers: { accept: 'application/json' } });
+      const response = await fetch(`/api/agents?includeHidden=1&limit=500${items.length ? `&offset=${items.length}` : ''}`, { credentials: 'same-origin', headers: { accept: 'application/json' } });
       if (!response.ok) throw new Error(`status ${response.status}`);
       const data = await response.json();
       if (!Array.isArray(data.items)) throw new Error('invalid_list');
@@ -488,7 +488,7 @@ async function loadFeaturedSettings() {
   setFeaturedNotice('正在读取当前热门展示配置…');
 
   try {
-    const { ok, status, data } = await fetchJson('/api/featured-agents');
+    const { ok, status, data } = await fetchJson('/api/featured-agents?includeHidden=1');
     if (request !== state.featuredReadRequest) return;
     if (!ok || !Array.isArray(data?.agentIds)) {
       state.featuredLoaded = false;
@@ -711,7 +711,7 @@ async function openDetail(agentId) {
 
   let agent = state.items.find((item) => item.id === agentId) ?? null;
   try {
-    const { ok, data } = await fetchJson(`/api/agents/${encodeURIComponent(agentId)}`);
+    const { ok, data } = await fetchJson(`/api/agents/${encodeURIComponent(agentId)}?includeHidden=1`);
     if (ok && data?.item) agent = data.item;
   } catch {
     /* 详情接口失败时退回列表数据 */
@@ -1085,7 +1085,7 @@ async function startEdit(agentId) {
   setNotice('', '', false);
   let agent = state.items.find((item) => item.id === agentId) ?? null;
   try {
-    const { ok, data } = await fetchJson(`/api/agents/${encodeURIComponent(agentId)}`);
+    const { ok, data } = await fetchJson(`/api/agents/${encodeURIComponent(agentId)}?includeHidden=1`);
     if (ok && data?.item) agent = data.item;
   } catch {
     /* 详情拉取失败时退回列表数据（缺长文本字段） */
